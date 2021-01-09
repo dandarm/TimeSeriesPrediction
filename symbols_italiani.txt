@@ -1,0 +1,41 @@
+Company	Ticker	ISIN (and link to quote webpage)	ICB Sector
+A2A	A2A	IT0001233417	7530 (Electricity)[citation needed]
+Amplifon	AMP	IT0004056880	
+Atlantia	ATL	IT0003506190	2770 (Industrial Transportation)[citation needed]
+Azimut	AZM	IT0003261697	8770 (Financial Services)[citation needed]
+Banca Generali	BGN	IT0001031084	8770 (Financial Services)
+Banco BPM	BAMI	IT0005218380	8350 (Banks)
+BPER Banca	BPE	IT0000066123	8350 (Banks)[citation needed]
+Brembo	BRE	IT0005252728	3350 (Automobiles & Parts)
+Buzzi Unicem	BZU	IT0001347308	2350 (Construction & Materials)[citation needed]
+Campari	CPR	IT0003849244	3530 (Beverages)[citation needed]
+CNH Industrial	CNHI	NL0010545661	2700 Industrial Goods & Services
+Diasorin	DIA	IT0003492391	
+Enel	ENEL	IT0003128367	7530 (Electricity)[citation needed]
+Eni	ENI	IT0003132476	0530 (Oil & Gas Producers)[citation needed]
+Exor	EXO	IT0001353140	8770 (Financial Services)[citation needed]
+Ferrari	RACE	NL0011509302	3350(Automobiles & Parts)[citation needed]
+Fiat Chrysler Automobiles	FCA	NL0010877643	3350(Automobiles & Parts)[citation needed]
+FinecoBank	FBK	IT0000072170	8350 (Banks)[citation needed]
+Generali	G	IT0000062072	8530 (Nonlife Insurance)[citation needed]
+Intesa Sanpaolo	ISP	IT0000072618	8350 (Banks)[citation needed]
+Italgas	IG	IT0005211237	
+Juventus Football Club	JUVE	IT0000336518	
+Leonardo	LDO	IT0003856405	2710 (Aerospace & Defense)[citation needed]
+Mediobanca	MB	IT0000062957	8350 (Banks)[citation needed]
+Moncler	MONC	IT0004965148	3760 (Personal Goods)[citation needed][3][4]
+Pirelli	PIRC	IT0005278236	3350(Automobiles & Parts)[citation needed] |
+Poste italiane	PST	IT0003796171	8530 (Nonlife Insurance)[citation needed]
+Prysmian	PRY	IT0004176001	2730 (Electronic & Electrical Equipment)[citation needed]
+Recordati	REC	IT0003828271	4570 Pharmaceuticals & Biotechnology[citation needed]|
+Saipem	SPM	IT0000068525	0570 (Oil Equipment Services & Distribution)[citation needed]
+Salvatore Ferragamo	SFER	IT0004712375	3760 (Personal Goods)[citation needed]
+Snam	SRG	IT0003153415	7570 (Gas Water & Multiutilities)[citation needed]
+STMicroelectronics	STM	NL0000226223	9570 (Technology Hardware & Equipment)[citation needed]
+Telecom Italia	TIT	IT0003497168	6530 (Fixed Line Telecommunications)[citation needed]
+Tenaris	TEN	LU0156801721	1750 (Industrial Metals & Mining)[citation needed]
+Terna	TRN	IT0003242622	7530 (Electricity)[citation needed]
+UBI Banca	UBI	IT0003487029	8350 (Banks)[citation needed]
+UniCredit	UCG	IT0004781412	8350 (Banks)[citation needed]
+Unipol	UNI	IT0004810054	8530 (Nonlife Insurance)[citation needed]
+UnipolSai	US	IT0004827447	8530 (Nonlife Insurance)[citation needed]
