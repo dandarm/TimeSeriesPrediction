@@ -4,20 +4,24 @@ from sklearn import preprocessing
 
 from nsp.nsp_utils import (find_result, find_gap, find_hldif, find_emad, find_stoch, find_volat)
 
+
 class Serie():
-    def __init__(self, x, y):
+    def __init__(self, x, y, colonna_valore):
         '''
         x è numero o data
         y è il valore della serie
         '''
         self.x = x
         self.y = y
+        self.NOME_VALORE = colonna_valore
         self.df = self.make_dataframe()
+        self.new_data=None
+        
         
     def make_dataframe(self):
         frame = pd.DataFrame(self.y, index = self.x)
         frame.index.name='Date'
-        frame.columns = {'CLOSE'}
+        frame.columns = {self.NOME_VALORE}
         
         return frame
     
@@ -29,13 +33,13 @@ class Serie():
     
     
     def aggiungi_indicatori(self, window_autocorr, lag_autocorr, fast_emad, slow_emad, period_volat, k_stoch, smooth_stoch):
-        self.df['log_ret'] = np.log(self.df['CLOSE']).diff()
+        self.df['log_ret'] = np.log(self.df[self.NOME_VALORE]).diff()
         self.df['AUTCOR'] = self.df['log_ret'].rolling(window=window_autocorr, min_periods=window_autocorr, 
                                                              center=False).apply(lambda x: x.autocorr(lag=lag_autocorr), raw=False)
-        self.df['EMAD'] = find_emad(self.df, fast_emad, slow_emad)
-        self.df['VOLAT'] = find_volat(self.df, period_volat)
+        self.df['EMAD'] = find_emad(self.df, fast_emad, slow_emad, self.NOME_VALORE)
+        self.df['VOLAT'] = find_volat(self.df, period_volat, self.NOME_VALORE)
         
-        
+        # a causa dei calcoli serve cancellare i primi step
         row_del = np.max([fast_emad, slow_emad, k_stoch, smooth_stoch, period_volat, k_stoch+smooth_stoch-1, window_autocorr+1, lag_autocorr])
         new_data = self.df[row_del-1:]
         new_data.reset_index(inplace=True)
@@ -43,11 +47,11 @@ class Serie():
         # заменяем пустые данные нулем
         new_data = new_data.fillna(0)
         min_max_scaler = preprocessing.MinMaxScaler()
-        new_data['CLOSE'] = min_max_scaler.fit_transform(new_data.CLOSE.values.reshape(-1,1))
+        new_data[self.NOME_VALORE] = min_max_scaler.fit_transform(new_data[self.NOME_VALORE].values.reshape(-1,1))
         new_data['EMAD'] = min_max_scaler.fit_transform(new_data.EMAD.values.reshape(-1,1))
         new_data['VOLAT'] = min_max_scaler.fit_transform(new_data.VOLAT.values.reshape(-1,1))
         new_data['AUTCOR'] = min_max_scaler.fit_transform(new_data.AUTCOR.values.reshape(-1,1))
-        self.new_data = new_data[['Date','AUTCOR','CLOSE','EMAD','VOLAT']]
+        self.new_data = new_data[['Date','AUTCOR',self.NOME_VALORE,'EMAD','VOLAT']]
         
         
     @staticmethod    
@@ -75,22 +79,26 @@ class Serie():
         X, Y = [], []
         #if 'Date' in self.new_data.columns:
         #    self.new_data.set_index('Date', inplace=True)
-        closen = self.new_data.loc[:, 'CLOSE'].tolist()
-        emadn = self.new_data.loc[:, 'EMAD'].tolist()
-        volatn = self.new_data.loc[:, 'VOLAT'].tolist()
-        autocorn = self.new_data.loc[:, 'AUTCOR'].tolist()
+        
+        if self.new_data is not None: # ho gli indicatori
             
-        for i in range(0, len(self.new_data)-(WINDOW+FORECAST), STEP): 
-            
-            elementi=[]
-            for col in ['CLOSE','EMAD','VOLAT','AUTCOR']:
-                elemento = self.new_data.iloc[i:i+WINDOW][col].values
-                elementi.append(elemento)
+            for i in range(0, len(self.new_data)-(WINDOW+FORECAST), STEP): 
+                elementi=[]
+                for col in [self.NOME_VALORE,'EMAD','VOLAT','AUTCOR']:
+                    elemento = self.new_data.iloc[i:i+WINDOW][col].values
+                    elementi.append(elemento)
 
-            y_i =  self.new_data.iloc[i+WINDOW+FORECAST]['CLOSE']
-            x_i = np.column_stack(elementi)
-            X.append(x_i)
-            Y.append(y_i)
+                y_i =  self.new_data.iloc[i+WINDOW+FORECAST][self.NOME_VALORE]
+                x_i = np.column_stack(elementi)
+                X.append(x_i)
+                Y.append(y_i)
+                
+        else: # ho solo il prezzo e non gli indicatori
+            for i in range(0, len(self.df)-(WINDOW+FORECAST), STEP): 
+                x_i = self.df.iloc[i:i+WINDOW][self.NOME_VALORE].values
+                y_i =  self.df.iloc[i+WINDOW+FORECAST][self.NOME_VALORE]
+                X.append(x_i)
+                Y.append(y_i)
 
         return np.array(X), np.array(Y)
         

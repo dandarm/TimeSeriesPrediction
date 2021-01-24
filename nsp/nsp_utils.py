@@ -37,12 +37,12 @@ def segnale_base(valore_previsto, soglia_commissione=0.001, percentuale_fissa=0.
 
 
 # --- Gap calculation function ---
-def find_gap(ishod):
+def find_gap(ishod, nome_valore):
     # разница между текущим открытием и предыдущим закрытием
     gap_res = []
     gap_res.append(0)
     for i in range(0,len(ishod)-1):
-        gap = abs(ishod["Open"][i+1] - ishod["CLOSE"][i])
+        gap = abs(ishod["Open"][i+1] - ishod[nome_valore][i])
         gap_res.append(gap)
     return pd.DataFrame(gap_res)
 
@@ -56,7 +56,7 @@ def find_hldif(ishod):
     return pd.DataFrame(hldif_res)
 
 # --- The function of calculating the difference of two exponential moving averages ---
-def find_emad(ishod, fast, slow):
+def find_emad(ishod, fast, slow, nome_valore):
     # находим из двух параметров быстрый и медленный
     params = [fast,slow]
     params = pd.DataFrame(params)
@@ -67,34 +67,34 @@ def find_emad(ishod, fast, slow):
     sma_slow = []
     ema_slow = []
     for i in range(0,len(ishod)):
-        smas = 0 if (i < (slower-1)) else ishod["CLOSE"][i-(slower-1):i+1].mean()
+        smas = 0 if (i < (slower-1)) else ishod[nome_valore][i-(slower-1):i+1].mean()
         sma_slow.append(smas)
         if i < (slower-1):
             emas = 0
         elif i == (slower-1):
-            emas = ishod["CLOSE"][i-(slower-1):i+1].mean()
+            emas = ishod[nome_valore][i-(slower-1):i+1].mean()
         else:
-            emas = (alpha_slow * ishod["CLOSE"][i]) + ((1 - alpha_slow)*ema_slow[i-1])
+            emas = (alpha_slow * ishod[nome_valore][i]) + ((1 - alpha_slow)*ema_slow[i-1])
         ema_slow.append(emas)
     # считаем быструю EMA
     alpha_fast = 2 / (faster + 1)
     sma_fast = []
     ema_fast = []
     for i in range(0,len(ishod)):
-        smaf = 0 if (i < (slower-1)) else ishod["CLOSE"][i-(faster-1):i+1].mean()
+        smaf = 0 if (i < (slower-1)) else ishod[nome_valore][i-(faster-1):i+1].mean()
         sma_fast.append(smaf)
         if i < (slower-1):
             emaf = 0
         elif i == (slower-1):
-            emaf = ishod["CLOSE"][i-(faster-1):i+1].mean()
+            emaf = ishod[nome_valore][i-(faster-1):i+1].mean()
         else:
-            emaf = (alpha_fast * ishod["CLOSE"][i]) + ((1 - alpha_fast)*ema_fast[i-1])
+            emaf = (alpha_fast * ishod[nome_valore][i]) + ((1 - alpha_fast)*ema_fast[i-1])
         ema_fast.append(emaf)
     emad_res = pd.DataFrame(ema_fast) - pd.DataFrame(ema_slow)
     return emad_res
 
 # --- Stochastic Oscillator Calculation Function ---
-def find_stoch(ishod, k, smooth):
+def find_stoch(ishod, k, smooth, nome_valore):
     # находим из двух параметров k и период сглаживания
     params = [k,smooth]
     params = pd.DataFrame(params)
@@ -108,7 +108,7 @@ def find_stoch(ishod, k, smooth):
     for i in range(0,len(ishod)):
         high = 0 if (i < (k_per-1)) else ishod["High"][i-(k_per-1):i+1].max()
         low = 0 if (i < (k_per-1)) else ishod["Low"][i-(k_per-1):i+1].min()
-        k_pokaz = 0 if (i < (k_per-1)) else (ishod["CLOSE"][i] - low) / (high - low)
+        k_pokaz = 0 if (i < (k_per-1)) else (ishod[nome_valore][i] - low) / (high - low)
         max_high.append(high)
         min_low.append(low)
         k_res.append(k_pokaz) 
@@ -121,10 +121,10 @@ def find_stoch(ishod, k, smooth):
     return pd.DataFrame(stoch_res)
 
 # --- Volatility calculation function ---
-def find_volat(ishod, period):
+def find_volat(ishod, period, nome_valore):
     # значение волатильности за определенный период
     volat_res = []
     for i in range(0,len(ishod)):
-        volat = 0 if (i < (period-1)) else ishod["CLOSE"][i-(period-1):i+1].std()
+        volat = 0 if (i < (period-1)) else ishod[nome_valore][i-(period-1):i+1].std()
         volat_res.append(volat) 
     return pd.DataFrame(volat_res)
