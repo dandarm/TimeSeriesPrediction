@@ -97,10 +97,14 @@ class Serie():
             for i in range(0, len(self.df)-(WINDOW+FORECAST), STEP): 
                 x_i = self.df.iloc[i:i+WINDOW][self.NOME_VALORE].values
                 y_i =  self.df.iloc[i+WINDOW+FORECAST][self.NOME_VALORE]
-                X.append(x_i)
+                X.append([x_i])
                 Y.append(y_i)
+                
+            X = np.array(X)
+            Y = np.array(Y)
+            X = X.reshape(len(X),-1,1)
 
-        return np.array(X), np.array(Y)
+        return X, Y
         
 
         
