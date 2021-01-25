@@ -6,17 +6,43 @@ from nsp.nsp_utils import (find_result, find_gap, find_hldif, find_emad, find_st
 
 
 class Serie():
-    def __init__(self, x, y, colonna_valore):
+    #def __init__(self, x, y, colonna_valore):
+    #    '''
+    #    x è numero o data
+    #    y è il valore della serie
+    #    '''
+    #    self.x = x
+    #    self.y = y
+    #    self.NOME_VALORE = colonna_valore
+    #    self.df = self.make_dataframe()
+    #    self.new_data=None
+        
+    def __init__(self, dataframe, colonna_valore):
         '''
         x è numero o data
         y è il valore della serie
         '''
-        self.x = x
-        self.y = y
+        self.x = None
+        self.y = None
         self.NOME_VALORE = colonna_valore
-        self.df = self.make_dataframe()
-        self.new_data=None
+        ############ MAI DIMENTICARE DI TOGLIERE I NAN, CI SONO SEMPRE!
+        self.df = dataframe
+        if any(dataframe.isna()):
+            print('ci sono nan')
+            #self.df = dataframe.fillna(0)
+            print(dataframe.isna().sum())
+            interpolato = dataframe.interpolate(method='polynomial', order=2)
+            self.df = interpolato
+        if any(interpolato.isna()):
+            print('ci sono ancora nan')
+            print(interpolato.isna().sum())
         
+        self.new_data=self.df
+        min_max_scaler = preprocessing.MinMaxScaler()
+        self.new_data[self.NOME_VALORE] = min_max_scaler.fit_transform(self.new_data[self.NOME_VALORE].values.reshape(-1,1))
+        for col in self.df.columns:
+            self.new_data[col] = min_max_scaler.fit_transform(self.new_data[col].values.reshape(-1,1))
+       
         
     def make_dataframe(self):
         frame = pd.DataFrame(self.y, index = self.x)
@@ -93,6 +119,9 @@ class Serie():
                 X.append(x_i)
                 Y.append(y_i)
                 
+            X = np.array(X)
+            Y = np.array(Y)
+                
         else: # ho solo il prezzo e non gli indicatori
             for i in range(0, len(self.df)-(WINDOW+FORECAST), STEP): 
                 x_i = self.df.iloc[i:i+WINDOW][self.NOME_VALORE].values
@@ -103,6 +132,26 @@ class Serie():
             X = np.array(X)
             Y = np.array(Y)
             X = X.reshape(len(X),-1,1)
+
+        return X, Y
+    
+    def crea_pezzetti_window2(self, WINDOW, STEP, FORECAST, colonne_aggiuntive):
+        X, Y = [], []
+            
+        for i in range(0, len(self.new_data)-(WINDOW+FORECAST), STEP): 
+            elementi=[]
+            for col in ([self.NOME_VALORE] + colonne_aggiuntive):
+                elemento = self.new_data.iloc[i:i+WINDOW][col].values
+                elementi.append(elemento)
+
+            y_i =  self.new_data.iloc[i+WINDOW+FORECAST][self.NOME_VALORE]
+            x_i = np.column_stack(elementi)
+            X.append(x_i)
+            Y.append(y_i)
+        
+        X = np.array(X) 
+        Y = np.array(Y)
+        #X = X.reshape(len(X),-1,1)
 
         return X, Y
         
