@@ -1,12 +1,6 @@
 import pandas as pd
 import numpy as np
 
-#@title <b><font color="gree" size="+2">Declare all the functions for calculating additional parameters {display-mode: "form"}
-def simple_func(ishod):
-    result_res = []
-    for i in range(0,len(ishod)):
-        result_res.append(ishod[i])
-    return pd.DataFrame(result_res)
 
 def find_result(ishod):
     result_res = []
@@ -37,18 +31,16 @@ def segnale_base(valore_previsto, soglia_commissione=0.001, percentuale_fissa=0.
 
 
 # --- Gap calculation function ---
-def find_gap(ishod, nome_valore):
-    # разница между текущим открытием и предыдущим закрытием
+def find_gap(ishod):
     gap_res = []
     gap_res.append(0)
     for i in range(0,len(ishod)-1):
-        gap = abs(ishod["Open"][i+1] - ishod[nome_valore][i])
+        gap = abs(ishod["Open"][i+1] - ishod["Close"][i])
         gap_res.append(gap)
     return pd.DataFrame(gap_res)
 
 # --- Calculation Function (High-Low) ---
 def find_hldif(ishod):
-    # разница между максимумом и минимумом
     hldif_res = []
     for i in range(0,len(ishod)):
         hldif = (ishod["High"][i] - ishod["Low"][i])
@@ -57,12 +49,11 @@ def find_hldif(ishod):
 
 # --- The function of calculating the difference of two exponential moving averages ---
 def find_emad(ishod, fast, slow, nome_valore):
-    # находим из двух параметров быстрый и медленный
     params = [fast,slow]
     params = pd.DataFrame(params)
-    faster = int(params.min()) # период быстрой ЭкспСкользСредн
-    slower = int(params.max()) # период медленной ЭкспСкользСредн
-    # считаем медленную EMA
+    faster = int(params.min())
+    slower = int(params.max())
+
     alpha_slow = 2 / (slower + 1)
     sma_slow = []
     ema_slow = []
@@ -76,7 +67,7 @@ def find_emad(ishod, fast, slow, nome_valore):
         else:
             emas = (alpha_slow * ishod[nome_valore][i]) + ((1 - alpha_slow)*ema_slow[i-1])
         ema_slow.append(emas)
-    # считаем быструю EMA
+
     alpha_fast = 2 / (faster + 1)
     sma_fast = []
     ema_fast = []
@@ -94,25 +85,23 @@ def find_emad(ishod, fast, slow, nome_valore):
     return emad_res
 
 # --- Stochastic Oscillator Calculation Function ---
-def find_stoch(ishod, k, smooth, nome_valore):
-    # находим из двух параметров k и период сглаживания
+def find_stoch(ishod, k, smooth):
     params = [k,smooth]
     params = pd.DataFrame(params)
-    smooth_per = int(params.min()) # период сглаживания
-    k_per = int(params.max()) # период k
-    otstup = (k_per + smooth_per)-1 # необходимый отступ дней для анализа
-    # считаем показатель k
+    smooth_per = int(params.min())
+    k_per = int(params.max())
+    otstup = (k_per + smooth_per)-1
     max_high = []
     min_low = []
     k_res = []
     for i in range(0,len(ishod)):
         high = 0 if (i < (k_per-1)) else ishod["High"][i-(k_per-1):i+1].max()
         low = 0 if (i < (k_per-1)) else ishod["Low"][i-(k_per-1):i+1].min()
-        k_pokaz = 0 if (i < (k_per-1)) else (ishod[nome_valore][i] - low) / (high - low)
+        k_pokaz = 0 if (i < (k_per-1)) else (ishod["Close"][i] - low) / (high - low)
         max_high.append(high)
         min_low.append(low)
         k_res.append(k_pokaz) 
-    # сглаживаем показатель k
+
     stoch_k = pd.DataFrame(k_res)
     stoch_res = []
     for i in range(0,len(ishod)):
@@ -122,7 +111,6 @@ def find_stoch(ishod, k, smooth, nome_valore):
 
 # --- Volatility calculation function ---
 def find_volat(ishod, period, nome_valore):
-    # значение волатильности за определенный период
     volat_res = []
     for i in range(0,len(ishod)):
         volat = 0 if (i < (period-1)) else ishod[nome_valore][i-(period-1):i+1].std()

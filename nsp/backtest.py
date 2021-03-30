@@ -1,15 +1,16 @@
 import numpy as np
 
 
-class Backtest_mio():
+class Backtest():
     
-    def __init__(self, serie_originale, capitale_iniziale, commissioni_perc, commissioni_fisse):
+    def __init__(self, serie_originale, capitale_iniziale, commissioni_perc, commissioni_fisse, forecast):
         
         self.serie_originale = serie_originale
         self.tempo = np.arange(len(serie_originale), dtype=int)
         self.capitale_iniziale = capitale_iniziale
         self.commissioni_perc = commissioni_perc
         self.commissioni_fisse = commissioni_fisse
+        self.forecast = forecast
         
     def calcola(self, segnale):
         # resetta per ripetere i calcoli
@@ -18,7 +19,7 @@ class Backtest_mio():
         self.stock = np.zeros(len(self.serie_originale))
         
         investimento = self.capitale_iniziale
-        for t in self.tempo[1:-1]:
+        for t in self.tempo[self.forecast:-self.forecast]:
             #print(t, end=' ')
             # se il segale non è cambiato rispetto al t precedente
             if (segnale[t-1] ==segnale[t]):

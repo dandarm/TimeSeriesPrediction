@@ -5,6 +5,7 @@ __pycache__/
 tutte_serie_storiche_MI.npy
 Singola.ipynb
 Tante.ipynb
-test.hdf5
-model.h5
+*.hdf5
+*.h5
 weights.h5
+traning_loss/

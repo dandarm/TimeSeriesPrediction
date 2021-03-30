@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-import yahoofinancials #conda envirnoment tf_base
+import yahoofinancials #conda environment tf_base
 
 def load():
     # carica simboli
