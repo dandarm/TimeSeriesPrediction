@@ -12,4 +12,4 @@ traning_loss/
 *.csv
 .idea/
 old/
-resampled/
+resampled
