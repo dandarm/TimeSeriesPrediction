@@ -9,3 +9,6 @@ Tante.ipynb
 *.h5
 weights.h5
 traning_loss/
+*.csv
+.idea/
+old/
