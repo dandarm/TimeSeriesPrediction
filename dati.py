@@ -62,7 +62,7 @@ df_1day = df_1day.set_index('ds_')
 
 #make_pd_date_interval('2021-06-10','2021-07-10', 'D')
 # 0.04 represent a month in 2 years 
-train, test = make_pd_date_interval_train_test(df_1day, 0.04)
+train, test = make_pd_date_interval_train_test(df_1day, 0.96)
 
 df_train = pd.merge(train, df_1day, on='ds')
 df_test = pd.merge(test, df_1day, on='ds')
@@ -79,7 +79,7 @@ forecast = model.predict(df_test)
 
 model.plot(forecast)
 df_1day.y.plot()
-plt.show()
+#plt.show()
 
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error
 
@@ -87,14 +87,14 @@ y_true = df_test.y
 y_pred = forecast['yhat'].values
 mae = mean_absolute_error(y_true, y_pred)
 mape = mean_absolute_percentage_error(y_true, y_pred)
-print(f'MAE: {round(mae,3)} \t MAPE: {round(mape,5)}')
+print(f'MAE: {round(mae,3)} \t MAPE: {round(mape,5)} \t ACCURACY: {round((1-mape)*100,3)} %')
 
-# from prophet.diagnostics import cross_validation
-# df_cv = cross_validation(model, initial='365 days', period='30 days', horizon = '365 days')
+from prophet.diagnostics import cross_validation
+df_cv = cross_validation(model, initial='365 days', period='30 days', horizon = '365 days')
 
-# from prophet.diagnostics import performance_metrics
-# df_p = performance_metrics(df_cv)
-# df_p
+from prophet.diagnostics import performance_metrics
+df_p = performance_metrics(df_cv)
+df_p
 
-# from prophet.plot import plot_cross_validation_metric
-# fig = plot_cross_validation_metric(df_cv, metric='mape')
+from prophet.plot import plot_cross_validation_metric
+fig = plot_cross_validation_metric(df_cv, metric='mape')
