@@ -90,7 +90,9 @@ mape = mean_absolute_percentage_error(y_true, y_pred)
 print(f'MAE: {round(mae,3)} \t MAPE: {round(mape,5)} \t ACCURACY: {round((1-mape)*100,3)} %')
 
 from prophet.diagnostics import cross_validation
-df_cv = cross_validation(model, initial='365 days', period='30 days', horizon = '365 days')
+df_cv = cross_validation(model, initial="730 days", period="15 days", horizon = "30 days")
+
+#, parallel="processes")
 
 from prophet.diagnostics import performance_metrics
 df_p = performance_metrics(df_cv)
