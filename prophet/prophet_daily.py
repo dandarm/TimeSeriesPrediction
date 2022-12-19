@@ -13,9 +13,9 @@ import matplotlib.pyplot as plt
 from sklearn import linear_model
 #import networkx as nx
 
-from data_transform import file_to_transform, df_trades_resample, trades_files, trades2_transformed_files
+from utils.data_transform import file_to_transform, df_trades_resample, trades_files, trades2_transformed_files
 #root = Path("/home/daniele/Documenti/Progetti/TimeSeries/borsa/download_data")
-from load_dfs import load_dfs, intersez_date, date_limite, max_intersection
+from utils.load_dfs import load_dfs, intersez_date, date_limite, max_intersection
 #print(f"Root directory: {root}")
 
 def make_pd_date_interval(inizio, fine, frequenza):
@@ -54,6 +54,7 @@ df_list, coinpairs = load_dfs(resampled_data_folder, "df5min")
 df = df_list[99]
 df_1day = df.resample('D').mean()
 df_1day = df_1day.reset_index(level=0)
+
 df_1day.columns = ['ds', 'y']
 
 df_1day['ds_'] = df_1day['ds']
