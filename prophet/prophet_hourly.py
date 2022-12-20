@@ -54,7 +54,7 @@ df.y.plot()
 y_true = test.y.values
 y_pred = forecast['yhat'].values
 mae = mean_absolute_error(y_true, y_pred)
-mape = mean_absolute_percentage_error(y_true, y_pred)
+mape = mean_absolute_percentage_error(y_debug true, y_pred)
 print(f'MAE: {round(mae,3)} \t MAPE: {round(mape,5)} \t ACCURACY: {round((1-mape)*100,3)} %')
 
 # create Dask scheduler and worker automatically
