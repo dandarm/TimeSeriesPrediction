@@ -54,14 +54,17 @@ df.y.plot()
 y_true = test.y.values
 y_pred = forecast['yhat'].values
 mae = mean_absolute_error(y_true, y_pred)
-mape = mean_absolute_percentage_error(y_debug true, y_pred)
+mape = mean_absolute_percentage_error(y_true, y_pred)
 print(f'MAE: {round(mae,3)} \t MAPE: {round(mape,5)} \t ACCURACY: {round((1-mape)*100,3)} %')
 
 # create Dask scheduler and worker automatically
-client = Client()  
-df_cv = cross_validation(model, initial="365 days", period="15 days", horizon = "30 days", parallel="dask")
+#client = Client(n_workers=12)  
 
-#, parallel="processes")
+#df_cv = cross_validation(model, initial="17280 hours", period="720 hours", horizon = "720 hours", parallel="dask")
+
+df_cv = cross_validation(model, initial="17280 hours", period="720 hours", horizon = "720 hours", parallel="processes")
+
+#df_cv = cross_validation(model, initial="17280 hours", period="720 hours", horizon = "720 hours", parallel="threads")
 
 from prophet.diagnostics import performance_metrics
 df_p = performance_metrics(df_cv)
