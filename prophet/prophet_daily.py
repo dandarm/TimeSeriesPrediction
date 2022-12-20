@@ -52,8 +52,10 @@ df_list, coinpairs = load_dfs(resampled_data_folder, "df5min")
 # Get only the bitcoin column
 
 df = df_list[99]
-df_1day = df.resample('D').mean()
+df_1day = df.resample('H').mean()
 df_1day = df_1day.reset_index(level=0)
+
+
 
 df_1day.columns = ['ds', 'y']
 
