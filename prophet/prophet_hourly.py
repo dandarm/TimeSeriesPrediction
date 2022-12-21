@@ -8,15 +8,14 @@ from pathlib import Path
 import re
 import datetime
 import dateutil
-import dask
 from multiprocessing import Pool
 import matplotlib.pyplot as plt
+from prophet import Prophet
+from prophet.diagnostics import cross_validation,performance_metrics
+from prophet.plot import plot_cross_validation_metric
 from sklearn import linear_model
 from sklearn.model_selection import train_test_split
-from prophet import Prophet
-from dask.distributed import Client
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error
-from prophet.diagnostics import cross_validation
 #import networkx as nx
 
 def make_pd_date_interval(inizio, fine, frequenza):
@@ -29,26 +28,68 @@ def make_pd_date_interval(inizio, fine, frequenza):
 resampled_prophet_data_folder = Path("resampled_prophet")
 
 # load the btc data 5 min sampling
-df=pd.read_csv(str(resampled_prophet_data_folder)+"/btc_hourly.csv")
+df=pd.read_csv(str(resampled_prophet_data_folder)+"/btc_hourly.csv", parse_dates=["timestamp"])
 
 df.columns = ['ds', 'y']
 
-df['ds_'] = df['ds']
-df = df.set_index('ds_')
-
 train, test = train_test_split(df, train_size=0.96, shuffle=False)
 
+# param_grid = {
+#     'holidays_prior_scale': [0.01, 0.1, 1.0, 10.0],
+#     'seasonality_mode': ['additive', 'multiplicative'], 
+#     'changepoint_prior_scale': [0.001, 0.01, 0.1, 0.5],
+#     'seasonality_prior_scale': [0.01, 0.1, 1.0, 10.0],
+# }
 
-# Start to use Prophet
-model = Prophet().fit(train)
+# # Generate all combinations of parameters
+# all_params = [dict(zip(param_grid.keys(), v)) for v in itertools.product(*param_grid.values())]
+# mapes = []  # Store the MAPEs for each params here
 
-#forecast = model.predict(test)
-#forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
+# # Use cross validation to evaluate all parameters
+# for params in all_params:
+#     m = Prophet(**params).fit(train)  # Fit model with given params
+#     df_cv = cross_validation(m, initial="9360 hours", period="2160 hours", horizon="720 hours", parallel="processes")
+#     df_p = performance_metrics(df_cv, rolling_window=1)
+#     mapes.append(df_p['mape'].values[0])
 
-forecast = model.predict(test)
+# # Find the best parameters
+# tuning_results = pd.DataFrame(all_params)
+# tuning_results['mape'] = mapes
+# print(tuning_results)
 
-model.plot(forecast)
-df.y.plot()
+# best_params = all_params[np.argmin(mapes)]
+# print(f"Best Parameters {best_params}")
+
+
+# Best parameters combination results
+m = Prophet(
+    holidays_prior_scale=0.01,
+    seasonality_mode="multiplicative",
+    changepoint_prior_scale=0.5, 
+    seasonality_prior_scale=10.0
+    ).fit(train)
+
+df_cv = cross_validation(
+    m, 
+    initial="9360 hours", 
+    period="2160 hours", 
+    horizon="720 hours", 
+    parallel="processes"
+    )
+
+m.plot(df_cv)
+
+#df_p = performance_metrics(df_cv, rolling_window=1)
+
+df_p = performance_metrics(df_cv)
+
+fig = plot_cross_validation_metric(df_cv, metric='mape')
+
+forecast = m.predict(test)
+
+m.plot(forecast)
+plt.plot(df['ds'], df['y'])
+
 #plt.show()
 
 y_true = test.y.values
@@ -56,19 +97,3 @@ y_pred = forecast['yhat'].values
 mae = mean_absolute_error(y_true, y_pred)
 mape = mean_absolute_percentage_error(y_true, y_pred)
 print(f'MAE: {round(mae,3)} \t MAPE: {round(mape,5)} \t ACCURACY: {round((1-mape)*100,3)} %')
-
-# create Dask scheduler and worker automatically
-#client = Client(n_workers=12)  
-
-#df_cv = cross_validation(model, initial="17280 hours", period="720 hours", horizon = "720 hours", parallel="dask")
-
-df_cv = cross_validation(model, initial="17280 hours", period="720 hours", horizon = "720 hours", parallel="processes")
-
-#df_cv = cross_validation(model, initial="17280 hours", period="720 hours", horizon = "720 hours", parallel="threads")
-
-from prophet.diagnostics import performance_metrics
-df_p = performance_metrics(df_cv)
-df_p
-
-from prophet.plot import plot_cross_validation_metric
-fig = plot_cross_validation_metric(df_cv, metric='mape')

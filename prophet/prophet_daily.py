@@ -13,8 +13,6 @@ import matplotlib.pyplot as plt
 from prophet import Prophet
 from prophet.diagnostics import cross_validation,performance_metrics
 from prophet.plot import plot_cross_validation_metric
-
-
 from sklearn import linear_model
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error
@@ -39,51 +37,59 @@ train, test = train_test_split(df, train_size=0.96, shuffle=False)
 #forecast = model.predict(test)
 #forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
 
-param_grid = {
-    'holidays_prior_scale': [0.01, 0.1, 1.0, 10.0],
-    'seasonality_mode': ['additive', 'multiplicative'], 
-    'changepoint_prior_scale': [0.001, 0.01, 0.1, 0.5],
-    'seasonality_prior_scale': [0.01, 0.1, 1.0, 10.0],
-}
+# GRID SEARCH 
 
-# Generate all combinations of parameters
-all_params = [dict(zip(param_grid.keys(), v)) for v in itertools.product(*param_grid.values())]
-mapes = []  # Store the MAPEs for each params here
+# param_grid = {
+#     'holidays_prior_scale': [0.01, 0.1, 1.0, 10.0],
+#     'seasonality_mode': ['additive', 'multiplicative'], 
+#     'changepoint_prior_scale': [0.001, 0.01, 0.1, 0.5],
+#     'seasonality_prior_scale': [0.01, 0.1, 1.0, 10.0],
+# }
 
-# Use cross validation to evaluate all parameters
-for params in all_params:
-    m = Prophet(**params).fit(train)  # Fit model with given params
-    df_cv = cross_validation(m, initial="390 days", period="90 days", horizon = "30 days", parallel="processes")
-    df_p = performance_metrics(df_cv, rolling_window=1)
-    mapes.append(df_p['mape'].values[0])
+# # Generate all combinations of parameters
+# all_params = [dict(zip(param_grid.keys(), v)) for v in itertools.product(*param_grid.values())]
+# mapes = []  # Store the MAPEs for each params here
 
-# Find the best parameters
-tuning_results = pd.DataFrame(all_params)
-tuning_results['mape'] = mapes
-print(tuning_results)
+# # Use cross validation to evaluate all parameters
+# for params in all_params:
+#     m = Prophet(**params).fit(train)  # Fit model with given params
+#     df_cv = cross_validation(m, initial="390 days", period="90 days", horizon = "30 days", parallel="processes")
+#     df_p = performance_metrics(df_cv, rolling_window=1)
+#     mapes.append(df_p['mape'].values[0])
 
-best_params = all_params[np.argmin(mapes)]
-print(f"Best Parameters {best_params}")
+# # Find the best parameters
+# tuning_results = pd.DataFrame(all_params)
+# tuning_results['mape'] = mapes
+# print(tuning_results)
+
+# best_params = all_params[np.argmin(mapes)]
+# print(f"Best Parameters {best_params}")
 
 # Best parameters combination results
-# m = Prophet(changepoint_prior_scale=0.5, seasonality_prior_scale=0.01).fit(train)
-# df_cv = cross_validation(m, initial="390 days", period="90 days", horizon = "30 days", parallel="processes")
+m = Prophet(
+    holidays_prior_scale=0.01,
+    seasonality_mode="multiplicative",
+    changepoint_prior_scale=0.5, 
+    seasonality_prior_scale=0.01
+    ).fit(train)
 
-# m.plot(df_cv)
+df_cv = cross_validation(m, initial="390 days", period="90 days", horizon = "30 days", parallel="processes")
 
-# df_p = performance_metrics(df_cv, rolling_window=1)
+m.plot(df_cv)
 
-# fig = plot_cross_validation_metric(df_cv, metric='mape')
+df_p = performance_metrics(df_cv, rolling_window=1)
 
-# forecast = m.predict(test)
+fig = plot_cross_validation_metric(df_cv, metric='mape')
 
-# m.plot(forecast)
-# plt.plot(df['ds'], df['y'])
+forecast = m.predict(test)
 
-# #plt.show()
+m.plot(forecast)
+plt.plot(df['ds'], df['y'])
 
-# y_true = test.y.values
-# y_pred = forecast['yhat'].values
-# mae = mean_absolute_error(y_true, y_pred)
-# mape = mean_absolute_percentage_error(y_true, y_pred)
-# print(f'MAE: {round(mae,3)} \t MAPE: {round(mape,5)} \t ACCURACY: {round((1-mape)*100,3)} %')
+#plt.show()
+
+y_true = test.y.values
+y_pred = forecast['yhat'].values
+mae = mean_absolute_error(y_true, y_pred)
+mape = mean_absolute_percentage_error(y_true, y_pred)
+print(f'MAE: {round(mae,3)} \t MAPE: {round(mape,5)} \t ACCURACY: {round((1-mape)*100,3)} %')
