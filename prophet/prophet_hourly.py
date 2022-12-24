@@ -1,22 +1,19 @@
-import numpy as np
-import pandas as pd
-#pd.set_option('max_rows',999)
-pd.options.display.float_format = '{:.9f}'.format
-import random
-import itertools
+"""
+Run prophet prediction with hourly data
+"""
 from pathlib import Path
-import re
-import datetime
-import dateutil
-from multiprocessing import Pool
-import matplotlib.pyplot as plt
-from prophet import Prophet
-from prophet.diagnostics import cross_validation,performance_metrics
-from prophet.plot import plot_cross_validation_metric
-from sklearn import linear_model
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error
-#import networkx as nx
+import pandas as pd
+import matplotlib.pyplot as plt
+from prophet import Prophet
+from prophet.diagnostics import cross_validation, performance_metrics
+from prophet.plot import plot_cross_validation_metric
+
+
+# Options used for debugging
+# pd.set_option('max_rows',999)
+pd.options.display.float_format = '{:.9f}'.format
 
 def make_pd_date_interval(inizio, fine, frequenza):
     future = pd.date_range(inizio,fine, freq=frequenza).strftime("%Y-%b-%d").tolist()
@@ -24,6 +21,7 @@ def make_pd_date_interval(inizio, fine, frequenza):
     future.columns = ['ds']
     future['ds']= pd.to_datetime(future['ds'])
     return future
+
 
 resampled_prophet_data_folder = Path("resampled_prophet")
 
@@ -70,10 +68,10 @@ m = Prophet(
     ).fit(train)
 
 df_cv = cross_validation(
-    m, 
-    initial="9360 hours", 
-    period="2160 hours", 
-    horizon="720 hours", 
+    m,
+    initial="9360 hours",
+    period="2160 hours",
+    horizon="720 hours",
     parallel="processes"
     )
 
