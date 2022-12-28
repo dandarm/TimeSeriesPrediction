@@ -1,21 +1,28 @@
 """
+
+TARGET: ritorno 4.0 % mensile
+
 Leggi i dati
 
 fai il training su un anno di dati
 
 Dati Input:
 
-- dizionario parametri per il modello di prophet
+- dizionario parametri per il modello di prophet (ok)
+
+Singleton -> una classe sola che fa tutto
+
+Facciamo un modulo e vaffanculo 
 
 Parametri Input:
 
-- tabella real_datasources dati hourly ( con le colonne ds and y ? )
-- definizione portafoglio iniziale
-- decidi data di inizio predizione
-- decidi data di fine predizione
-- intervallo di comprare/vendere azioni (e.g. 1 giorno 24 punti)
+- tabella real_datasources dati hourly ( con le colonne ds and y ? ) (ok)
+- definizione portafoglio iniziale, euro (ok)
+- decidi data di inizio predizione (ok)
+- decidi data di fine predizione (ok)
+- intervallo di comprare/vendere azioni (e.g. 1 giorno 24 punti) 
 - frazione portafoglio investimento per ogni evento comprare/vendere
-- percentuale tassazione per ogni transazione
+- percentuale tassazione per ogni transazione (0.01 % su binance)
 - finestra temporale usata sul futuro per prendere la decisione (e.g. 1 mese 720 punti)
 
 Output:
