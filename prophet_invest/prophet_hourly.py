@@ -67,21 +67,21 @@ m = Prophet(
     seasonality_prior_scale=10.0
     ).fit(train)
 
-df_cv = cross_validation(
-    m,
-    initial="9360 hours",
-    period="2160 hours",
-    horizon="720 hours",
-    parallel="processes"
-    )
+# df_cv = cross_validation(
+#     m,
+#     initial="9360 hours",
+#     period="2160 hours",
+#     horizon="720 hours",
+#     parallel="processes"
+#     )
 
-m.plot(df_cv)
+# m.plot(df_cv)
 
 #df_p = performance_metrics(df_cv, rolling_window=1)
 
-df_p = performance_metrics(df_cv)
+# df_p = performance_metrics(df_cv)
 
-fig = plot_cross_validation_metric(df_cv, metric='mape')
+# fig = plot_cross_validation_metric(df_cv, metric='mape')
 
 forecast = m.predict(test)
 
