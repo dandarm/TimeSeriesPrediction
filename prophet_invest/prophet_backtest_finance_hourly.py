@@ -5,15 +5,9 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error
 import pandas as pd
-from dateutil import parser
-from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
-import math   
 
-# from nsp_prophet.backtest_finance import BacktestFinance
-# from prophet import Prophet
-# from prophet.diagnostics import cross_validation, performance_metrics
-# from prophet.plot import plot_cross_validation_metric
+from nsp_prophet.backtest_finance import BacktestFinance
 
 resampled_prophet_data_folder = Path("resampled_prophet")
 
@@ -22,32 +16,29 @@ df = pd.read_csv(str(resampled_prophet_data_folder)+"/btc_hourly.csv", parse_dat
 
 df.columns = ['ds', 'y']
 
-start_date_pred=parser.parse("2020-06-01 T00:00:00.0000")
-end_date_pred=parser.parse("2021-06-24 T00:00:00.0000")
-interval_pred="24 hours"
+Bfinance = BacktestFinance(
+    df=df,
+    start_date_pred="2020-06-01 T00:00:00.0000",
+    end_date_pred="2021-06-24 T00:00:00.0000",
+    interval_pred="24 hours",
+    lookup_future_window="72 hours",
+    initial_wallet=1000.0,
+    initial_stock=0.0,
+    invest_perc=0.01,
+    fees_perc=0.01,
+    fees_fixed=0.01
+    )
 
-interval_pred_td=pd.Timedelta(interval_pred)
+prophet_dict = {
+    "holidays_prior_scale": 0.01,
+    "seasonality_mode": "multiplicative",
+    "changepoint_prior_scale": 0.5,
+    "seasonality_prior_scale": 10.0
+}
 
-n_interval = (end_date_pred-start_date_pred).total_seconds() / pd.Timedelta(interval_pred).total_seconds()
+Bfinance.calculate_signal_calendar(prophet_dict)
 
-n_interval = math.ceil(float(n_interval))
-
-print(n_interval)
-
-signal_calendar=[ start_date_pred+(pd.Timedelta(interval_pred)*t) for t in range(n_interval+1) ]
-
-# bf = BacktestFinance(
-#     df=df,
-#     start_date_pred=parser.parse("2020-06-01 T00:00:00.0000"),
-#     end_date_pred=parser.parse("2021-06-24 T00:00:00.0000"),
-#     interval_pred="24 hours",
-#     lookup_future_window="72 hours",
-#     initial_wallet=1000.0,
-#     initial_stock=0.0,
-#     invest_perc=0.01,
-#     fees_perc=0.01,
-#     fees_fixed=0.01
-#     )
+print(prophet_dict)
 
 # BacktestFinance().create_signal will get the dictionary with the parameters
 # for the Prophet model

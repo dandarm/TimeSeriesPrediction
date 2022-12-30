@@ -1,34 +1,44 @@
 import numpy as np
-
+import pandas as pd
+from dateutil import parser
+from datetime import datetime, timedelta
+import math
+from prophet import Prophet
+from prophet.diagnostics import cross_validation, performance_metrics
+from prophet.plot import plot_cross_validation_metric
 
 class BacktestFinance():
     
     def __init__(
         self, df, start_date_pred, end_date_pred,
-        interval_pred, initial_wallet, initial_stock, invest_perc, fees_perc, 
-        fees_fixed):
+        interval_pred, lookup_future_window, initial_wallet,
+        initial_stock, invest_perc, fees_perc, fees_fixed):
         
         self.df = df
-        self.start_date_pred = start_date_pred
-        self.end_date_pred = end_date_pred
+        self.start_date_pred = parser.parse(start_date_pred)
+        self.end_date_pred = parser.parse(end_date_pred)
         self.interval_pred = interval_pred
+        self.lookup_future_window = lookup_future_window
         self.initial_wallet = initial_wallet
         self.initial_stock = initial_stock
         self.invest_perc = invest_perc
         self.fees_perc = fees_perc
         self.fees_fixed = fees_fixed
         # Initialize the calendars
-        self.signal_calendar = [ for t ]
-        # self.wallet_calendar = np.zeros(len(self.df))
-        # self.wallet_calendar[0] = self.initial_wallet
-        # self.stock_calendar = np.zeros(len(self.df))
-        print(self.signal_calendar)
-
+        n_interval = (self.end_date_pred - self.start_date_pred).total_seconds() / pd.Timedelta(interval_pred).total_seconds()
+        n_interval = math.ceil(float(n_interval))
+        ds = [ self.start_date_pred+(pd.Timedelta(self.interval_pred)*t) for t in range(n_interval+1) ]
+        self.signal_calendar = pd.DataFrame(data={"ds": ds, "signal": np.zeros(len(ds), dtype=int)})
+        self.wallet_calendar = pd.DataFrame(data={"ds": ds, "wallet": np.zeros(len(ds))})
+        self.stock_calendar = pd.DataFrame(data={"ds": ds, "stock": np.zeros(len(ds))})
         
     # Could be an internal method ?
-    def calculate_signal_calendar(self):
-        pass
-
+    def calculate_signal_calendar(self, prophet_dict):
+        for _,row in self.signal_calendar.iterrows():
+            train=self.df[(self.df["ds"] < row["ds"])]
+            m = Prophet(**prophet_dict).fit(train)
+            print(len(train))
+        return
 
     def calculate_money_calendar(self): 
         # reset to repeat calculations
