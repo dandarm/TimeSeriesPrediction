@@ -26,6 +26,7 @@ class BacktestFinance():
         
     # Could be an internal method ?
     def calculate_signal_calendar(self):
+        pass
 
 
     def calculate_money_calendar(self): 
@@ -63,7 +64,3 @@ class BacktestFinance():
     def sell(self, t, stock_amount):
         self.wallet_calendar[t] = self.wallet_calendar[t-1] + stock_amount*self.df[t] * (1 - self.fees_perc)
         self.stock_calendar[t] = self.stock_calendar[t-1] - stock_amount
-
-
-# The real program 
-
