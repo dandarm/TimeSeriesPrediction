@@ -18,10 +18,11 @@ class BacktestFinance():
         self.fees_perc = fees_perc
         self.fees_fixed = fees_fixed
         # Initialize the calendars
-        # self.signal_calendar = np.arange(len(df), dtype=int)
+        self.signal_calendar = [ for t ]
         # self.wallet_calendar = np.zeros(len(self.df))
         # self.wallet_calendar[0] = self.initial_wallet
         # self.stock_calendar = np.zeros(len(self.df))
+        print(self.signal_calendar)
 
         
     # Could be an internal method ?
