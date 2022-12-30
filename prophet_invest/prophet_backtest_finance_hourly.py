@@ -21,14 +21,14 @@ df.columns = ['ds', 'y']
 
 bf = BacktestFinance(
     df=df,
-    start_date_pred=parser.parse("2020-06-01"), 
+    start_date_pred=parser.parse("2020-06-01"),
     end_date_pred=parser.parse("2021-06-24"),
     interval_pred="24 hours",
     lookup_future_window="72 hours",
-    initial_wallet=1000.0, 
-    initial_stock=0.0, 
-    invest_perc=0.01, 
-    fees_perc=0.01, 
+    initial_wallet=1000.0,
+    initial_stock=0.0,
+    invest_perc=0.01,
+    fees_perc=0.01,
     fees_fixed=0.01
     )
 
