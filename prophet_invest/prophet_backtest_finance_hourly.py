@@ -32,7 +32,8 @@ bf = BacktestFinance(
     fees_fixed=0.01
     )
 
-# BacktestFinance().create_signal will get the dictionary with the parameters for the Prophet model
+# BacktestFinance().create_signal will get the dictionary with the parameters
+# for the Prophet model
 
 
 # train, test = train_test_split(df, train_size=0.96, shuffle=False)
