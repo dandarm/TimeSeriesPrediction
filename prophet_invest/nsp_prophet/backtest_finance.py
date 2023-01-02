@@ -32,7 +32,10 @@ class BacktestFinance():
         self.signal_calendar = pd.DataFrame(data={"ds": ds, "signal": np.zeros(len(ds), dtype=int)})
         self.wallet_calendar = pd.DataFrame(data={"ds": ds, "wallet": np.zeros(len(ds))})
         self.stock_calendar = pd.DataFrame(data={"ds": ds, "stock": np.zeros(len(ds))})
-        
+        # Create predict_calendar, ds filtered by df and yhat of zeros that then is populated 
+        # with the predicted values
+
+
     # Could be an internal method ?
     def calculate_signal_calendar(self, prophet_dict):
         for _,row in self.signal_calendar.iterrows():
@@ -45,6 +48,15 @@ class BacktestFinance():
             m = Prophet(**prophet_dict).fit(train)
 
             lookup_forecast = m.predict(lookup)
+            
+            # Fit the prediction and create the linear regression
+            d = np.polyfit(range(len(lookup_forecast)),lookup_forecast['yhat'],1)
+            f = np.poly1d(d)
+            lookup_forecast["interp"]=f(range(len(lookup_forecast)))
+
+            # Update the signal_calendar
+
+            # Save the Daily prediction inside the predict_calendar
 
             print(len(train))
         return
