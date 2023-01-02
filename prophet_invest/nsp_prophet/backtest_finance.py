@@ -3,6 +3,7 @@ import pandas as pd
 from dateutil import parser
 from datetime import datetime, timedelta
 import math
+import matplotlib.pyplot as plt
 from prophet import Prophet
 from prophet.diagnostics import cross_validation, performance_metrics
 from prophet.plot import plot_cross_validation_metric
@@ -11,14 +12,14 @@ class BacktestFinance():
     
     def __init__(
         self, df, start_date_pred, end_date_pred,
-        interval_pred, lookup_future_window, initial_wallet,
+        interval_pred, lookup_window, initial_wallet,
         initial_stock, invest_perc, fees_perc, fees_fixed):
         
         self.df = df
         self.start_date_pred = parser.parse(start_date_pred)
         self.end_date_pred = parser.parse(end_date_pred)
         self.interval_pred = interval_pred
-        self.lookup_future_window = lookup_future_window
+        self.lookup_window = lookup_window
         self.initial_wallet = initial_wallet
         self.initial_stock = initial_stock
         self.invest_perc = invest_perc
@@ -35,8 +36,16 @@ class BacktestFinance():
     # Could be an internal method ?
     def calculate_signal_calendar(self, prophet_dict):
         for _,row in self.signal_calendar.iterrows():
-            train=self.df[(self.df["ds"] < row["ds"])]
+            train=self.df[(self.df["ds"] < row["ds"] )]
+
+            lookup=self.df[(self.df["ds"] >= row["ds"] ) & 
+             (self.df["ds"] < (row["ds"] + 
+             pd.Timedelta(self.lookup_window))) ]
+
             m = Prophet(**prophet_dict).fit(train)
+
+            lookup_forecast = m.predict(lookup)
+
             print(len(train))
         return
 
