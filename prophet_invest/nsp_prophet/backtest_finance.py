@@ -34,6 +34,11 @@ class BacktestFinance():
         self.stock_calendar = pd.DataFrame(data={"ds": ds, "stock": np.zeros(len(ds))})
         # Create predict_calendar, ds filtered by df and yhat of zeros that then is populated 
         # with the predicted values
+        self.predict_calendar = pd.DataFrame(columns=[ 'ds', 'trend', 'yhat_lower', 'yhat_upper',
+         'trend_lower', 'trend_upper', 'daily', 'daily_lower', 'daily_upper', 'multiplicative_terms',
+         'multiplicative_terms_lower', 'multiplicative_terms_upper', 'weekly', 'weekly_lower', 
+         'weekly_upper', 'yearly', 'yearly_lower', 'yearly_upper', 'additive_terms', 
+         'additive_terms_lower', 'additive_terms_upper', 'yhat', 'interp' ])
 
 
     # Could be an internal method ?
@@ -48,15 +53,22 @@ class BacktestFinance():
             m = Prophet(**prophet_dict).fit(train)
 
             lookup_forecast = m.predict(lookup)
-            
+
             # Fit the prediction and create the linear regression
-            d = np.polyfit(range(len(lookup_forecast)),lookup_forecast['yhat'],1)
+            d = np.polyfit(range(len(lookup_forecast)), lookup_forecast['yhat'], 1)
             f = np.poly1d(d)
-            lookup_forecast["interp"]=f(range(len(lookup_forecast)))
+            lookup_forecast["interp"] = f(range(len(lookup_forecast)))
+
+            # Save the prediction (daily) inside the predict_calendar
+
+            self.predict_calendar = pd.concat( [ 
+                self.predict_calendar, lookup_forecast[(lookup_forecast["ds"] >= row["ds"] ) & 
+                (lookup_forecast["ds"] < (row["ds"] + 
+                pd.Timedelta(self.interval_pred))) ] ] )
 
             # Update the signal_calendar
 
-            # Save the Daily prediction inside the predict_calendar
+
 
             print(len(train))
         return
