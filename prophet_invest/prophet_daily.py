@@ -25,7 +25,7 @@ def make_pd_date_interval(inizio, fine, frequenza):
     future['ds']= pd.to_datetime(future['ds'])
     return future
 
-resampled_prophet_data_folder = Path("resampled_prophet")
+resampled_prophet_data_folder = Path("../resampled_prophet")
 
 # load the btc data 5 min sampling
 df=pd.read_csv(str(resampled_prophet_data_folder)+"/btc_daily.csv", parse_dates=["timestamp"])

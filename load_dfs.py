@@ -1,8 +1,26 @@
 import pandas as pd
 import re
 
-def load_dfs(df_folder, string_name):
-    filelist = [f for f in df_folder.iterdir() if f.is_file()]
+def get_files(sampling_frequency_string, root_folder):
+    folder_sampled = root_folder / sampling_frequency_string
+    filelist = [f for f in folder_sampled.iterdir() if f.is_file()]
+    expr = re.compile(f'.*{sampling_frequency_string}\.csv')
+    trades_files = [f for f in filelist if expr.match(str(f))]
+    return trades_files
+
+def load_dfs(list_files_to_load):
+    #filelist = [f for f in df_folder.iterdir() if f.is_file()]
+    #expr = re.compile(f'.*{string_name}\.csv')
+    #list_files_to_load = [f for f in filelist if expr.match(str(f))]
+    df_list = []
+    for f in list_files_to_load:
+        df = pd.read_csv(f, header=0, index_col=['timestamp'], parse_dates=['timestamp'],  skipinitialspace=True)
+        df.index = pd.to_datetime(df.index, errors = 'coerce')
+        df_list.append(df)
+    return df_list, [f.name.split('-')[0] for f in list_files_to_load]
+
+def load_dfs_from_pickle(folder, pickle_name):
+    filelist = [f for f in folder.iterdir() if f.is_file()]
     expr = re.compile(f'.*{string_name}\.csv')
     to_load = [f for f in filelist if expr.match(str(f))]
     df_list = []
