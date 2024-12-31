@@ -114,12 +114,14 @@ def create_sequences(data, seq_length=30, horizon=1):
         seq_x = data[i: i + seq_length]  # finestra [i, i+seq_length)
         seq_y = data[i + seq_length: i + seq_length + horizon]  # successivi 'horizon' punti
         X.append(seq_x)
+        #print(seq_x.shape)
         y.append(seq_y)
 
     # for i, xi in enumerate(X):
     #    print(i, np.array(xi).shape, np.array(xi).dtype)
-    X_np = np.array(X, dtype=np.float32)
-    X = torch.tensor(X_np) # shape (num_samples, seq_length)
+
+    #X_np = np.array(X, dtype=np.float32)
+    X = torch.stack(X) # shape (num_samples, seq_length)
     y = torch.tensor(np.array(y, dtype=np.float32))  # shape (num_samples, horizon)
 
     # Convertiamo in tensori PyTorch
