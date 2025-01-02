@@ -23,12 +23,10 @@ def make_pd_date_interval(inizio, fine, frequenza):
     return future
 
 
-resampled_prophet_data_folder = Path("../resampled_prophet")
+resampled_prophet_data_folder = Path("resampled_prophet")
 
 # load the btc data 5 min sampling
-filename = resampled_prophet_data_folder / "btc_hourly.csv"
-
-df = pd.read_csv(str(resampled_prophet_data_folder)+"/btc_hourly.csv", parse_dates=["timestamp"])
+df=pd.read_csv(str(resampled_prophet_data_folder)+"/btc_hourly.csv", parse_dates=["timestamp"])
 
 df.columns = ['ds', 'y']
 
@@ -76,14 +74,14 @@ m = Prophet(
 #     horizon="720 hours",
 #     parallel="processes"
 #     )
-#
+
 # m.plot(df_cv)
 
 #df_p = performance_metrics(df_cv, rolling_window=1)
 
-#df_p = performance_metrics(df_cv)
+# df_p = performance_metrics(df_cv)
 
-#fig = plot_cross_validation_metric(df_cv, metric='mape')
+# fig = plot_cross_validation_metric(df_cv, metric='mape')
 
 forecast = m.predict(test)
 

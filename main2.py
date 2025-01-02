@@ -74,57 +74,45 @@ def train():
     root_path = Path("./")
 
     # 3.1 Recupera i param default
-    params = get_default_params()
-
-    # 3.2 Se hai un dizionario personalizzato, mergia/aggiorna
-    # if custom_params is not None:
-    #    params.update(custom_params)
-
-    # 3.3 Estrai dal dizionario
-    n_points = params['n_points']
-    noise_std = params['noise_std']
-    seq_length = params['seq_length']
-    horizon = params['horizon']
-    train_split = params['train_split']
-    batch_size = params['batch_size']
-    hidden_dim = params['hidden_dim']
-    learning_rate = params['learning_rate']
-    n_epochs = params['epochs']
-    exp_str = f"seq_length-{seq_length}§hidden_dim-{hidden_dim}§horizon-{horizon}§lr-{learning_rate}"
-
-    resampled_df = pd.read_csv("../resampled_BTC.csv")
-    prices = resampled_df['price'].values
-    prices = torch.tensor(prices)
-    train_loader, test_loader, train_dataset, test_dataset = get_loaders(serie=prices,
-                                                                         seq_length=seq_length,
-                                                                         horizon=horizon,
-                                                                         train_split=train_split,
-                                                                         batch_size=batch_size)
-
-    model = ImprovedLSTM(input_dim=1, hidden_dim=hidden_dim, horizon=horizon)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
+    pms = get_default_params()
+    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = pms['device']
+    exp_str = f"seq_length-{pms['seq_length']}§hidden_dim-{pms['hidden_dim']}§horizon-{pms['horizon']}§lr-{pms['learning_rate']}"
 
     output_path = (root_path / "output") / exp_str
     if not output_path.is_dir():
         os.mkdir(output_path)
 
+    resampled_df = pd.read_csv("../resampled_BTC.csv")
+    prices = resampled_df['price'].values
+    prices = torch.tensor(prices)
+    train_loader, test_loader, train_dataset, test_dataset = get_loaders(serie=prices,
+                                                                         seq_length=pms['seq_length'],
+                                                                         horizon=pms['horizon'],
+                                                                         train_split=pms['train_split'],
+                                                                         batch_size=pms['batch_size'],
+                                                                         device=pms['device'])
+
+    model = ImprovedLSTM(input_dim=1, hidden_dim=pms['hidden_dim'], horizon=pms['horizon'])
+    model.to(device)
+
+
     # 6.6 Definizione loss e optimizer
     criterion = nn.MSELoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=pms['learning_rate'])
 
     # 6.7 Training loop con logging
     train_losses = []
     val_losses = []
 
-    pbar = tqdm(range(n_epochs), desc=f"Epoch ", unit='epoch')
+    pbar = tqdm(range(pms['epochs']), desc=f"Epoch ", unit='epoch')
 
     # Creiamo la figura in anticipo
     fig, ax = plt.subplots()
 
     logging_epochs = 100
     for epoch in pbar:
-        train_loss = train_one_epoch(model, device, train_loader, optimizer, criterion, epoch, n_epochs)
+        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, epoch, pms['epochs'])
         train_losses.append(train_loss)
 
         if epoch % (logging_epochs * 10) == 0:

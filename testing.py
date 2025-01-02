@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
+import matplotlib.dates as mdates
 
 def plot_predictions(dataset, model, num_samples=10):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -59,7 +59,7 @@ def get_one_prediction(dataset, device, idx, model):
 
 
 def backtest_strategy(model, dataset, initial_capital=10000.0,
-                      horizon=5, seq_length=50, transaction_fee=0.0):
+                      horizon=5, seq_length=50, transaction_fee=0.0, time_index=None):
     """
     ESEMPIO SEMPLIFICATO:
     - Ad ogni time step t (rolling), otteniamo la previsione dei prossimi 'horizon' step.
@@ -105,12 +105,16 @@ def backtest_strategy(model, dataset, initial_capital=10000.0,
     # ma per backtesting "rolling" potresti dover definire un subset con un pass "in avanti".
 
     with torch.no_grad():
-        for t in range(len(dataset)):
+        for i in range(len(dataset)):
+            if time_index is None:
+                t = i
+            else:
+                t = time_index[i]
             # Se (t + 1) > len(dataset), break
             # Oppure potresti evitare l'ultimo, dipende da come strutturi la rolling.
 
             # Otteniamo X e y reali (non useremo y per la strategia, se non a scopo di analisi)
-            X_t, y_t = dataset[t]  # X_t shape (seq_length,1), y_t shape (horizon,)
+            X_t, y_t = dataset[i]  # X_t shape (seq_length,1), y_t shape (horizon,)
 
             # Prepara input batch=1
             X_input = X_t.unsqueeze(0).float().to(device)  # (1, seq_length, 1)
@@ -120,7 +124,7 @@ def backtest_strategy(model, dataset, initial_capital=10000.0,
             y_pred_scaled = y_pred_scaled.squeeze(0).cpu().numpy()  # shape (horizon,)
 
             # Reconverti i prezzi predetti
-            scaler = dataset.scalers_X[t]
+            scaler = dataset.scalers_X[i]
             # Se stai scalando feature e target con lo stesso scaler, e target=price:
             y_pred = scaler.inverse_transform(y_pred_scaled.reshape(-1, 1)).flatten()
 
@@ -153,19 +157,20 @@ def backtest_strategy(model, dataset, initial_capital=10000.0,
                     capital = capital - cost  # fee dedotta
                     in_position = True
                     entry_price = current_price
+                    former_capital = capital
             else:
                 # in posizione, valuta se vendere
                 # Se la media delle previsioni < prezzo attuale (o soglia) => SELL
                 if max_future_price < current_price:
-                    # vendi
-                    action = "SELL"
                     # Ricavo
                     proceeds = shares_held * current_price
                     cost = proceeds * transaction_fee
-                    capital = proceeds - cost
-                    shares_held = 0
-                    in_position = False
-                    entry_price = 0.0
+                    if (proceeds - cost) > former_capital:
+                        action = "SELL"
+                        capital = proceeds - cost
+                        shares_held = 0
+                        in_position = False
+                        entry_price = 0.0
 
             # Salva lo stato in history
             record = {
@@ -202,9 +207,17 @@ def plot_backtest_with_forecasts(history_df, horizon=1):
     fig, ax = plt.subplots(figsize=(12, 6))
 
     # (1) Plot del prezzo reale
-    time_test = history_df['time_index']
+    time_test = pd.to_datetime(history_df['time_index'])
     price_test = history_df['current_price']
+    saccoccia = history_df['capital']
     ax.plot(time_test, price_test, label='Prezzo Reale', color='blue')
+    ax.plot(time_test, price_test, '.',  color='blue')
+    ax.set_ylabel('Prezzo BTC $', color='blue')
+
+    ax2 = ax.twinx()  # Crea un secondo asse y
+    ax2.plot(time_test, saccoccia, label='Capitale', color='red')
+    ax2.set_ylabel('Capitale $', color='red')
+    ax2.tick_params(axis='y', labelcolor='red')
 
     # Gestione marker BUY/SELL
     buy_label_used = False
@@ -213,21 +226,22 @@ def plot_backtest_with_forecasts(history_df, horizon=1):
     # Se i time_test sono di tipo datetime, la differenza dt sarà un Timedelta;
     # se sono float/int, dt sarà un numero. Ci adattiamo dinamicamente.
 
+    dt = (time_test.iloc[1] - time_test.iloc[0])
     # Funzione helper per calcolare un "dt" (distanza media fra step consecutivi)
-    def get_dt(t_idx):
-        # Se t_idx < len(time_test)-1, calcoliamo la differenza tra time_test[t_idx+1] e time_test[t_idx]
-        # Altrimenti usiamo la differenza media su tutto time_test, in modo da non andare out of range.
-        if t_idx < len(time_test) - 1:
-            return time_test[t_idx + 1] - time_test[t_idx]
-        else:
-            if len(time_test) > 1:
-                return (time_test.iloc[-1] - time_test.iloc[0]) / (len(time_test) - 1)
-            else:
-                return 1  # fallback generico se abbiamo 1 solo punto
+    # def get_dt(t_idx):
+    #     # Se t_idx < len(time_test)-1, calcoliamo la differenza tra time_test[t_idx+1] e time_test[t_idx]
+    #     # Altrimenti usiamo la differenza media su tutto time_test, in modo da non andare out of range.
+    #     if t_idx < time_test.iloc[-1]:  #   len(time_test) - 1:
+    #         return time_test[t_idx + 1] - time_test[t_idx]
+    #     else:
+    #         if len(time_test) > 1:
+    #             return (time_test.iloc[-1] - time_test.iloc[0]) / (len(time_test) - 1)
+    #         else:
+    #             return 1  # fallback generico se abbiamo 1 solo punto
 
     # (2) Ciclo su history_df per aggiungere marker di BUY/SELL e i "baffi" delle previsioni
     for idx, row in history_df.iterrows():
-        t_idx = row['time_index']  # potrebbe essere un intero (indice su price_test) o un valore di tempo
+        t_idx = pd.to_datetime(row['time_index'])  # potrebbe essere un intero (indice su price_test) o un valore di tempo
         action = row['action']
         y_pred = row['prediction']  # array/list se horizon>1, float se horizon=1
 
@@ -236,7 +250,7 @@ def plot_backtest_with_forecasts(history_df, horizon=1):
             # tempo effettivo sul grafico
             if t_idx < 0 or t_idx >= len(time_test):
                 continue  # ignora se out of range
-            current_time = time_test[t_idx]
+            current_time = t_idx  #time_test[t_idx]
             current_price = price_test[t_idx]
         else:
             # t_idx è già "tempo" (float/datetime). Cerchiamo l'indice più vicino?
@@ -250,8 +264,8 @@ def plot_backtest_with_forecasts(history_df, horizon=1):
                 continue
             idx_nearest = idx_nearest[0]
             current_time = t_idx
-            current_price = price_test[idx_nearest]
-            t_idx = idx_nearest
+            current_price = price_test.iloc[idx_nearest]
+            #t_idx = time_test[idx_nearest]
 
         # Plot marker BUY/SELL se presenti
         if action == "BUY":
@@ -269,7 +283,6 @@ def plot_backtest_with_forecasts(history_df, horizon=1):
         # Se horizon>1, y_pred è un array/list
         if horizon == 1:
             # y_pred float
-            dt = get_dt(t_idx)
             # Visualizzo un solo punto a t+1*dt
             future_time = current_time + dt
             ax.scatter(future_time, y_pred, color='orange', alpha=0.6, s=30)
@@ -281,7 +294,6 @@ def plot_backtest_with_forecasts(history_df, horizon=1):
             # y_pred è un array di lunghezza horizon
             # costruiamo l'asse X [t+1..t+horizon], spostandoci di dt*(1..horizon)
             if isinstance(y_pred, (list, np.ndarray)):
-                dt = get_dt(t_idx)
                 x_future = [current_time + (k + 1) * dt for k in range(horizon)]
 
                 # scatter di tutti i punti previsti
@@ -289,6 +301,24 @@ def plot_backtest_with_forecasts(history_df, horizon=1):
 
                 # volendo puoi tracciare una linea
                 ax.plot(x_future, y_pred, color='orange', alpha=0.3)
+
+                # collego le prediction al prezzo vero
+                ax.plot([current_time, x_future[0]], [current_price, y_pred[0]], color='orange', alpha=0.3)
+
+    # Ridurre il numero di tick sull'asse x
+    locator = mdates.AutoDateLocator(minticks=15, maxticks=30)  # Regola il numero minimo/massimo di tick
+    formatter = mdates.DateFormatter('%d-%m-%Y\n%H:%M')  # Formato delle date
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(formatter)
+    ax.grid(True, which='major', linestyle='--', linewidth=0.5)
+
+    # Ruotare le etichette per renderle leggibili
+    #plt.xticks(rotation=65)
+    # Ruotare le etichette manualmente
+    for label in ax.get_xticklabels():
+        label.set_rotation(45)
+
+
 
     ax.set_title("Backtest: Prezzo con BUY/SELL e Previsioni 'Baffi'")
     ax.set_xlabel("Tempo")

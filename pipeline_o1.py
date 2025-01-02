@@ -11,6 +11,8 @@ from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 from IPython.display import clear_output, display
 
+from torch.nn.parallel import DistributedDataParallel as DDP
+
 # region load data
 # ---------------------------------------------------------
 # 1) GENERAZIONE DATI ESEMPIO (SERIE TEMPORALE FINTA)
@@ -122,7 +124,7 @@ def create_sequences(data, seq_length=30, horizon=1):
 
     #X_np = np.array(X, dtype=np.float32)
     X = torch.stack(X) # shape (num_samples, seq_length)
-    y = torch.tensor(np.array(y, dtype=np.float32))  # shape (num_samples, horizon)
+    y = torch.stack(y)  # shape (num_samples, horizon)
 
     # Convertiamo in tensori PyTorch
     #X = torch.tensor(X)
@@ -173,7 +175,7 @@ def normalize_windows(X, y):
 
 
 class TimeSeriesDataset(Dataset):
-    def __init__(self, data, seq_length=30, horizon=1):
+    def __init__(self, data, seq_length=30, horizon=1, device='cuda'):
         """
         data: tensore 1D con la serie temporale
         seq_length: quanti punti usare come input
@@ -191,6 +193,12 @@ class TimeSeriesDataset(Dataset):
         # per compatibilità con LSTM (che di solito ha shape [B, T, Features]).
         # self.X = self.X.unsqueeze(-1)  # shape -> (num_samples, seq_length, 1)
         # dovrebbe averlo già fatto create_sequences
+        print(device)
+        self.X = self.X.to(device)
+        self.y = self.y.to(device)
+
+        assert self.X.is_cuda, "I dati non sono su CUDA!"
+        assert self.y.is_cuda, "I target non sono su CUDA!"
 
     def calc_normalization_4_windows(self):
         X_normalized, y_normalized, self.scalers_X = normalize_windows(self.X, self.y)
@@ -206,23 +214,25 @@ class TimeSeriesDataset(Dataset):
 
 
 def get_loaders(**kwargs):
+    device = kwargs.get('device')
     serie = kwargs.get('serie')
     seq_length = kwargs.get('seq_length')
     horizon = kwargs.get('horizon')
     train_split = kwargs.get('train_split')
     batch_size = kwargs.get('batch_size')
 
+
     split_point = int(len(serie) * train_split)
     train_data = serie[:split_point]
     test_data = serie[split_point:]
 
     # 6.2 Creiamo i dataset di train e test
-    train_dataset = TimeSeriesDataset(train_data, seq_length=seq_length, horizon=horizon)
-    test_dataset = TimeSeriesDataset(test_data, seq_length=seq_length, horizon=horizon)
+    train_dataset = TimeSeriesDataset(train_data, seq_length=seq_length, horizon=horizon, device=device)
+    test_dataset = TimeSeriesDataset(test_data, seq_length=seq_length, horizon=horizon, device=device)
 
     # 6.4 Dataloader
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)  #, num_workers=32, pin_memory=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, pin_memory=True)  #, num_workers=32, pin_memory=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)  #, num_workers=32, pin_memory=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size)  #, num_workers=32, pin_memory=True)
 
     return train_loader, test_loader, train_dataset, test_dataset
 
@@ -237,15 +247,12 @@ def get_loaders(**kwargs):
 # ------------------------------
 scaler = torch.cuda.amp.GradScaler()
 
-def train_one_epoch(model, device, data_loader, optimizer, criterion, epoch_idx, total_epochs):
+def train_one_epoch(model, data_loader, optimizer, criterion, epoch_idx, total_epochs):
     model.train()
     running_loss = 0.0
     total_samples = len(data_loader.dataset)
 
     for X_batch, y_batch in data_loader:
-        X_batch = X_batch.to(device).float()  # (batch_size, seq_length, 1)
-        y_batch = y_batch.to(device).float()  # (batch_size, horizon)
-
         optimizer.zero_grad()
 
         with torch.cuda.amp.autocast():
