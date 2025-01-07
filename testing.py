@@ -45,8 +45,8 @@ def get_one_prediction(dataset, device, idx, model):
     X_input = X.unsqueeze(0).float().to(device)  # (1, seq_length, 1)
     y_pred = model(X_input).cpu().numpy()  # (1, horizon)
     # Convertiamoli in numpy
-    X = X.squeeze(-1).numpy()  # shape (seq_length,)
-    y_true = y_true.numpy()  # shape (horizon,)
+    X = X.squeeze(-1).cpu().numpy()  # shape (seq_length,)
+    y_true = y_true.cpu().numpy()  # shape (horizon,)
     y_pred = y_pred.squeeze(0)  # shape (horizon,)
     # Inverse transform
     X_inversed = dataset.scalers_X[idx].inverse_transform(X.reshape(-1, 1))  # .flatten()
@@ -58,8 +58,7 @@ def get_one_prediction(dataset, device, idx, model):
     return X_inversed, horizon, seq_length, x_future, y_pred_inversed, y_true_inversed
 
 
-def backtest_strategy(model, dataset, initial_capital=10000.0,
-                      horizon=5, seq_length=50, transaction_fee=0.0, time_index=None):
+def backtest_strategy(model, dataset, params, time_index=None):
     """
     ESEMPIO SEMPLIFICATO:
     - Ad ogni time step t (rolling), otteniamo la previsione dei prossimi 'horizon' step.
@@ -80,7 +79,13 @@ def backtest_strategy(model, dataset, initial_capital=10000.0,
     Ritorna:
     - history: lista di dict con info su 'time', 'action', 'price', 'capital', 'position'
     """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    initial_capital = float(params['initial_capital'])
+    transaction_fee = float(params['transaction_fee']) / 100.0
+    horizon = params['horizon']
+    seq_length = params['seq_length']
+    device = params['device']
+    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Stato di trading
     capital = initial_capital
@@ -187,7 +192,7 @@ def backtest_strategy(model, dataset, initial_capital=10000.0,
     return pd.DataFrame(history)
 
 
-def plot_backtest_with_forecasts(history_df, horizon=1):
+def plot_backtest_with_forecasts(history_df, horizon=1, time_index_integer=False):
     """
     time_test: array-like di shape (N,) con i 'time_index' (possono essere int, float o datetime).
     price_test: array-like di shape (N,) con i prezzi reali sul periodo di test.
@@ -207,7 +212,10 @@ def plot_backtest_with_forecasts(history_df, horizon=1):
     fig, ax = plt.subplots(figsize=(12, 6))
 
     # (1) Plot del prezzo reale
-    time_test = pd.to_datetime(history_df['time_index'])
+    if time_index_integer:
+        time_test = history_df['time_index']
+    else:
+        time_test = pd.to_datetime(history_df['time_index'])
     price_test = history_df['current_price']
     saccoccia = history_df['capital']
     ax.plot(time_test, price_test, label='Prezzo Reale', color='blue')
@@ -241,18 +249,15 @@ def plot_backtest_with_forecasts(history_df, horizon=1):
 
     # (2) Ciclo su history_df per aggiungere marker di BUY/SELL e i "baffi" delle previsioni
     for idx, row in history_df.iterrows():
-        t_idx = pd.to_datetime(row['time_index'])  # potrebbe essere un intero (indice su price_test) o un valore di tempo
+        t_idx = row['time_index']
         action = row['action']
         y_pred = row['prediction']  # array/list se horizon>1, float se horizon=1
 
         # Se time_index è un int (indice sul test set), convertiamolo in tempo effettivo
-        if isinstance(t_idx, (int, np.integer)):
-            # tempo effettivo sul grafico
-            if t_idx < 0 or t_idx >= len(time_test):
-                continue  # ignora se out of range
-            current_time = t_idx  #time_test[t_idx]
+        if time_index_integer:  # isinstance(t_idx, (int, np.integer)):
             current_price = price_test[t_idx]
         else:
+            t_idx = pd.to_datetime(row['time_index'])
             # t_idx è già "tempo" (float/datetime). Cerchiamo l'indice più vicino?
             # Oppure assumiamo che time_index corrisponda esattamente a un valore in time_test
             # Per semplificare, assumiamo che sia "in time_test"
@@ -263,9 +268,10 @@ def plot_backtest_with_forecasts(history_df, horizon=1):
             if len(idx_nearest) == 0:
                 continue
             idx_nearest = idx_nearest[0]
-            current_time = t_idx
             current_price = price_test.iloc[idx_nearest]
             #t_idx = time_test[idx_nearest]
+
+        current_time = t_idx
 
         # Plot marker BUY/SELL se presenti
         if action == "BUY":
@@ -306,10 +312,12 @@ def plot_backtest_with_forecasts(history_df, horizon=1):
                 ax.plot([current_time, x_future[0]], [current_price, y_pred[0]], color='orange', alpha=0.3)
 
     # Ridurre il numero di tick sull'asse x
-    locator = mdates.AutoDateLocator(minticks=15, maxticks=30)  # Regola il numero minimo/massimo di tick
-    formatter = mdates.DateFormatter('%d-%m-%Y\n%H:%M')  # Formato delle date
-    ax.xaxis.set_major_locator(locator)
-    ax.xaxis.set_major_formatter(formatter)
+    if not time_index_integer:
+        locator = mdates.AutoDateLocator(minticks=15, maxticks=30)  # Regola il numero minimo/massimo di tick
+        formatter = mdates.DateFormatter('%d-%m-%Y\n%H:%M')  # Formato delle date
+        ax.xaxis.set_major_locator(locator)
+        ax.xaxis.set_major_formatter(formatter)
+
     ax.grid(True, which='major', linestyle='--', linewidth=0.5)
 
     # Ruotare le etichette per renderle leggibili

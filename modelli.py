@@ -1,6 +1,11 @@
 import torch
 import torch.nn as nn
 
+import sys
+sys.path.append("./TimeSeries_Prediction")
+from config import get_exp_str
+from transformer_ts import TimeSeriesTransformer
+
 # Funzione per salvare il checkpoint
 def save_checkpoint(model, optimizer, epoch, loss, file_path):
     """
@@ -43,6 +48,53 @@ def load_checkpoint(file_path, model, optimizer=None):
 
     print(f"Checkpoint caricato da {file_path}")
     return {'epoch': checkpoint['epoch'], 'loss': checkpoint['loss']}
+
+def load_model(params, save_path=None, model_path=None):
+    hidden_dim = params['hidden_dim']
+    horizon = params['horizon']
+
+    exp_str = get_exp_str(params)
+
+    model = ImprovedLSTM(input_dim=1, hidden_dim=hidden_dim, horizon=horizon)
+
+    if save_path is not None:
+        # file = "batch10K_seq_length-128§hidden_dim-1000§horizon-5§lr-0.001503/checkpoint_9000.pth"
+        # file = "seq_length-128§hidden_dim-1500§horizon-5§lr-0.001503/checkpoint_4000.pth"
+        file = save_path / exp_str / model_path
+        checkpoint_info = load_checkpoint(file, model)  # , optimizer)  l'ottomizer serve se voglio riprendere il training
+        print(f"Ripreso da epoca {checkpoint_info['epoch']} con loss {checkpoint_info['loss']}")
+
+    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = params['device']
+    model.to(device)
+
+    return model
+
+
+def load_Transformer_model(params, save_path=None, model_path=None):
+    exp_str = get_exp_str(params)
+
+    model = TimeSeriesTransformer(
+        input_dim=1,
+        d_model=64,
+        nhead=8,
+        num_encoder_layers=4,
+        dim_feedforward=128,
+        dropout=0.1,
+        max_len=5000,
+        out_dim=params['horizon'],  # previsioni scalari
+        return_sequences=False  # restituisci solo l'ultimo step
+    )
+
+    if save_path is not None:
+        file = save_path / exp_str / model_path
+        checkpoint_info = load_checkpoint(file, model)
+        print(f"Ripreso da epoca {checkpoint_info['epoch']} con loss {checkpoint_info['loss']}")
+
+    device = params['device']
+    model.to(device)
+
+    return model
 
 
 # ---------------------------------------------------------
@@ -133,9 +185,11 @@ class xLSTM(nn.Module):
         out = self.fc(x_out)#.unsqueeze(-1)  # shape (batch_size, horizon)
         return out
 
-
 import torch
 import torch.nn as nn
+
+
+
 
 class ImprovedLSTM(nn.Module):
     def __init__(self, input_dim=1, hidden_dim=64, horizon=1, dropout_rate=0.2):

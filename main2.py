@@ -15,10 +15,10 @@ import matplotlib.pyplot as plt
 from IPython.display import clear_output, display
 
 from pipeline_o1 import read_last_n_lines, get_loaders, train_one_epoch, evaluate_model, plot_losses, create_sequences, normalize_windows
-from modelli import xLSTM, ImprovedLSTM, save_checkpoint, load_checkpoint
-from config import get_default_params
+from modelli import xLSTM, ImprovedLSTM, save_checkpoint, load_checkpoint, load_model
+from config import get_default_params, get_exp_str
 from testing import plot_predictions, plot_one_prediction, backtest_strategy, plot_backtest_with_forecasts
-
+from pipeline_o1 import train, load_BTC_data, get_datasetloader_from_path
 from tqdm import tqdm
 
 def select_idx(backtest_df, i,f):
@@ -70,93 +70,28 @@ def backtesting():
     plot_backtest_with_forecasts(select_idx(backtest_df,400, 500), horizon=5)
 
 
-def train():
+def launch_training():
     root_path = Path("./")
+    save_path = root_path / "output"
 
     # 3.1 Recupera i param default
     pms = get_default_params()
-    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = pms['device']
-    exp_str = f"seq_length-{pms['seq_length']}§hidden_dim-{pms['hidden_dim']}§horizon-{pms['horizon']}§lr-{pms['learning_rate']}"
+    exp_str = get_exp_str(pms)
 
-    output_path = (root_path / "output") / exp_str
-    if not output_path.is_dir():
-        os.mkdir(output_path)
+    # LOAD DATA
+    data_path = "../resampled32k_BTC.csv"
+    serie, time_index = load_BTC_data(data_path)
+    train_loader, test_loader, train_dataset, test_dataset = get_datasetloader_from_path(serie, pms)
+    # LOAD MODEL
+    model = load_model(pms)
 
-    resampled_df = pd.read_csv("../resampled_BTC.csv")
-    prices = resampled_df['price'].values
-    prices = torch.tensor(prices)
-    train_loader, test_loader, train_dataset, test_dataset = get_loaders(serie=prices,
-                                                                         seq_length=pms['seq_length'],
-                                                                         horizon=pms['horizon'],
-                                                                         train_split=pms['train_split'],
-                                                                         batch_size=pms['batch_size'],
-                                                                         device=pms['device'])
-
-    model = ImprovedLSTM(input_dim=1, hidden_dim=pms['hidden_dim'], horizon=pms['horizon'])
-    model.to(device)
-
-
-    # 6.6 Definizione loss e optimizer
-    criterion = nn.MSELoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=pms['learning_rate'])
-
-    # 6.7 Training loop con logging
-    train_losses = []
-    val_losses = []
-
-    pbar = tqdm(range(pms['epochs']), desc=f"Epoch ", unit='epoch')
-
-    # Creiamo la figura in anticipo
-    fig, ax = plt.subplots()
-
-    logging_epochs = 100
-    for epoch in pbar:
-        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, epoch, pms['epochs'])
-        train_losses.append(train_loss)
-
-        if epoch % (logging_epochs * 10) == 0:
-            file_checkpoint = output_path / f"checkpoint_{epoch}.pth"
-            save_checkpoint(model, optimizer, epoch, train_loss, file_checkpoint)
-
-        # Aggiorniamo la barra con la loss attuale
-        pbar.set_postfix({'loss': f"{train_loss:.6f}"})
-
-        # print(f"Epoch [{epoch+1}/{n_epochs}] - "
-        #      f"Train Loss: {train_loss:.4f} - "
-        #      f"Test Loss: {val_loss:.4f}")
-
-        if epoch % logging_epochs == 0:
-            val_loss = evaluate_model(model, device, test_loader, criterion)
-            val_losses.append(val_loss)
-
-            # -- Plot dinamico --
-            clear_output(wait=True)  # pulisce l'output
-            ax.clear()  # ripulisce il grafico
-            ax.plot(train_losses, label='Train Loss')
-            ax.plot(val_losses, label='Val Loss')
-            ax.set_xlabel('Epoch')
-            ax.set_ylabel('Loss')
-            ax.set_yscale('log')
-            ax.set_xscale('log')
-            ax.set_title('Training progress')
-            ax.legend()
-            plt.savefig(output_path / f"losses_{epoch}.png")
-
-        else:
-            val_losses.append(val_loss)  # salvo il valore precedente, non lo ricalcolo e non plotto
-
-        # display(fig)                  # ridisegna la figura aggiornata
-
-    # 6.8 Plot delle curve di loss
-    # plot_losses(train_losses, val_losses)
-    plt.close(fig)  # per evitare un doppio plot in alcune versioni di jupyter
+    train(model, train_loader, test_loader, pms, save_path)
     print("Fine training!")
 
-    return train_losses, val_losses
+    return #train_losses, val_losses
 
 
 
 if __name__ == "__main__":
-    train()
+    launch_training()
     # backtesting()

@@ -12,21 +12,16 @@ import matplotlib.pyplot as plt
 from IPython.display import clear_output, display
 
 from torch.nn.parallel import DistributedDataParallel as DDP
+import os
+import sys
+sys.path.append("./TimeSeries_Prediction")
+from config import get_exp_str
+from modelli import save_checkpoint
+from tqdm import tqdm
 
-# region load data
-# ---------------------------------------------------------
-# 1) GENERAZIONE DATI ESEMPIO (SERIE TEMPORALE FINTA)
-# ---------------------------------------------------------
-def generate_fake_time_series(n_points=1000, noise_std=0.1):
-    """
-    Genera una serie temporale finta basata su una sinusoide, più un po' di rumore.
-    """
-    # Sequenza di angoli da 0 a 50, con n_points step
-    x_vals = torch.linspace(0, 50, steps=n_points)
-    # Creiamo una sinusoide + rumore gaussiano
-    data = torch.sin(x_vals) + noise_std * torch.randn(n_points)
-    return data
 
+
+# region funzioni dataset
 
 def read_last_n_lines(filepath, n=10000, encoding='utf-8'):
     """
@@ -88,10 +83,6 @@ def read_last_n_lines(filepath, n=10000, encoding='utf-8'):
         df['timestamp'] = pd.to_datetime(df['timestamp'], format='mixed', errors='coerce')
         df = df.set_index('timestamp')
     return df
-
-# endregion
-
-# region funzioni dataset
 
 # ---------------------------------------------------------
 # DATASET E DATALOADER
@@ -193,7 +184,6 @@ class TimeSeriesDataset(Dataset):
         # per compatibilità con LSTM (che di solito ha shape [B, T, Features]).
         # self.X = self.X.unsqueeze(-1)  # shape -> (num_samples, seq_length, 1)
         # dovrebbe averlo già fatto create_sequences
-        print(device)
         self.X = self.X.to(device)
         self.y = self.y.to(device)
 
@@ -204,8 +194,6 @@ class TimeSeriesDataset(Dataset):
         X_normalized, y_normalized, self.scalers_X = normalize_windows(self.X, self.y)
         self.X, self.y = torch.tensor(X_normalized), torch.tensor(y_normalized)
 
-
-
     def __len__(self):
         return len(self.X)
 
@@ -215,6 +203,7 @@ class TimeSeriesDataset(Dataset):
 
 def get_loaders(**kwargs):
     device = kwargs.get('device')
+    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     serie = kwargs.get('serie')
     seq_length = kwargs.get('seq_length')
     horizon = kwargs.get('horizon')
@@ -229,12 +218,53 @@ def get_loaders(**kwargs):
     # 6.2 Creiamo i dataset di train e test
     train_dataset = TimeSeriesDataset(train_data, seq_length=seq_length, horizon=horizon, device=device)
     test_dataset = TimeSeriesDataset(test_data, seq_length=seq_length, horizon=horizon, device=device)
+    print(f"Num. samples di training: {len(train_dataset)}, e {len(test_dataset)} samples di test ")
+    print(f"Memoria GPU allocata: {torch.cuda.memory_allocated() / 1024 ** 2:.2f} MB")
+    print(f"Memoria GPU riservata: {torch.cuda.memory_reserved() / 1024 ** 2:.2f} MB")
+    print(f"Trainingset device: {train_dataset.X.device}, testset device:  {test_dataset.X.device}")
 
     # 6.4 Dataloader
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)  #, num_workers=32, pin_memory=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size)  #, num_workers=32, pin_memory=True)
+    print(f"Num. Batch di training: {len(train_loader)}, e {len(test_loader)} batch di test ")
+
 
     return train_loader, test_loader, train_dataset, test_dataset
+
+def load_BTC_data(data_path):
+    df = pd.read_csv(data_path)
+    time_index = df['timestamp']
+    prices = df['price'].values
+    serie = torch.tensor(prices)
+
+    return serie, time_index
+
+def load_increasing_complex_ts(data_path, k, idx):
+    serie_generate = np.load(data_path, allow_pickle=True).item()
+    print(f"Num. Serie sommate sontenute: {serie_generate.keys()}")
+    serie = torch.tensor(serie_generate[k][idx])
+    time_index = range(len(serie))
+
+    return serie, time_index
+
+def get_datasetloader_from_path(time_serie, params):
+    seq_length = params['seq_length']
+    horizon = params['horizon']
+    train_split = params['train_split']
+    batch_size = params['batch_size']
+    device = params['device']
+
+    train_loader, test_loader, train_dataset, test_dataset = get_loaders(serie=time_serie,
+                                                                         seq_length=seq_length,
+                                                                         horizon=horizon,
+                                                                         train_split=train_split,
+                                                                         batch_size=batch_size,
+                                                                         device=device)
+
+    return  train_loader, test_loader, train_dataset, test_dataset
+
+
+
 
 
 # endregion
@@ -247,7 +277,75 @@ def get_loaders(**kwargs):
 # ------------------------------
 scaler = torch.cuda.amp.GradScaler()
 
-def train_one_epoch(model, data_loader, optimizer, criterion, epoch_idx, total_epochs):
+def create_output_dir(save_path, params):
+    exp_str = get_exp_str(params)
+    output_path = save_path / exp_str
+    if not output_path.is_dir():
+        os.mkdir(output_path)
+
+    return output_path
+
+def train(model, train_loader, test_loader, params, save_path):
+    output_path = create_output_dir(save_path, params)
+
+    # Definizione loss e optimizer
+    criterion = nn.MSELoss()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=params['learning_rate'])
+
+    # 6.7 Training loop con logging
+    train_losses = []
+    val_losses = []
+
+    pbar = tqdm(range(params['epochs']+1), desc=f"Epoch ", unit='epoch')
+
+    # Creiamo la figura in anticipo
+    fig, ax = plt.subplots()
+
+    testing_epochs = params['testing_epochs']
+    checkpoint_epochs = params['checkpoint_epochs']
+    for epoch in pbar:
+        train_loss = train_one_epoch(model, train_loader, optimizer, criterion)
+        train_losses.append(train_loss)
+
+        if epoch % (checkpoint_epochs) == 0:
+            file_checkpoint = output_path / f"checkpoint_{epoch}.pth"
+            save_checkpoint(model, optimizer, epoch, train_loss, file_checkpoint)
+
+        # Aggiorniamo la barra con la loss attuale
+        pbar.set_postfix({'loss': f"{train_loss:.6f}"})
+
+        # print(f"Epoch [{epoch+1}/{n_epochs}] - "
+        #      f"Train Loss: {train_loss:.4f} - "
+        #      f"Test Loss: {val_loss:.4f}")
+
+        if epoch % testing_epochs == 0:
+            val_loss = evaluate_model(model, test_loader, criterion)
+            val_losses.append(val_loss)
+
+            # -- Plot dinamico --
+            clear_output(wait=True)  # pulisce l'output
+            ax.clear()  # ripulisce il grafico
+            ax.plot(train_losses, label='Train Loss')
+            ax.plot(val_losses, label='Val Loss')
+            ax.set_xlabel('Epoch')
+            ax.set_ylabel('Loss')
+            ax.set_yscale('log')
+            ax.set_xscale('log')
+            ax.set_title('Training progress')
+            ax.legend()
+            plt.savefig(output_path / f"losses_{epoch}.png")
+
+        else:
+            val_losses.append(val_loss)  # salvo il valore precedente, non lo ricalcolo e non plotto
+
+        # display(fig)                  # ridisegna la figura aggiornata
+
+    # 6.8 Plot delle curve di loss
+    # plot_losses(train_losses, val_losses)
+    plt.close(fig)
+
+
+def train_one_epoch(model, data_loader, optimizer, criterion):
     model.train()
     running_loss = 0.0
     total_samples = len(data_loader.dataset)
@@ -271,7 +369,7 @@ def train_one_epoch(model, data_loader, optimizer, criterion, epoch_idx, total_e
     return epoch_loss
 
 
-def evaluate_model(model, device, data_loader, criterion):
+def evaluate_model(model, data_loader, criterion):
     """
     Esegue un passaggio di validazione/test.
     Ritorna la loss media (MSE) su tutto il dataset.
@@ -280,8 +378,8 @@ def evaluate_model(model, device, data_loader, criterion):
     running_loss = 0.0
     with torch.no_grad():
         for X_batch, y_batch in data_loader:
-            X_batch = X_batch.to(device).float()
-            y_batch = y_batch.to(device).float()
+            #X_batch = X_batch.to(device).float()
+            #y_batch = y_batch.to(device).float()
 
             outputs = model(X_batch).squeeze(-1)
             loss = criterion(outputs, y_batch)
