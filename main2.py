@@ -10,8 +10,10 @@ from sklearn.preprocessing import MinMaxScaler
 
 import torch
 import torch.nn as nn
+import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-import matplotlib.pyplot as plt
+
+
 from IPython.display import clear_output, display
 
 from pipeline_o1 import read_last_n_lines, get_loaders, train_one_epoch, evaluate_model, plot_losses, create_sequences, normalize_windows

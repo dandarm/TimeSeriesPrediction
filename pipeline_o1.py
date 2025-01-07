@@ -1,6 +1,8 @@
+from time import time
 from pathlib import Path
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from io import StringIO
 
 from sklearn.preprocessing import MinMaxScaler
@@ -8,7 +10,15 @@ from sklearn.preprocessing import MinMaxScaler
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-import matplotlib.pyplot as plt
+# 1) Mixed Precision
+from torch.cuda.amp import autocast, GradScaler
+# 2) PyTorch 2.0 compile (se disponibile)
+try:
+    from torch._dynamo import optimize  # o `torch.compile` in PyTorch 2.1
+    compile_available = True
+except ImportError:
+    compile_available = False
+
 from IPython.display import clear_output, display
 
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -275,7 +285,7 @@ def get_datasetloader_from_path(time_serie, params):
 # ------------------------------
 # 5) FUNZIONI DI TRAIN E TEST
 # ------------------------------
-scaler = torch.cuda.amp.GradScaler()
+#scaler = torch.cuda.amp.GradScaler()
 
 def create_output_dir(save_path, params):
     exp_str = get_exp_str(params)
@@ -292,19 +302,32 @@ def train(model, train_loader, test_loader, params, save_path):
     criterion = nn.MSELoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=params['learning_rate'])
 
+    if compile_available:
+        model = torch.compile(model)  # o `optimize("inductor")(model)`
+    model.train()
+
+    # GradScaler per AMP
+    scaler = GradScaler()
+
     # 6.7 Training loop con logging
     train_losses = []
     val_losses = []
 
-    pbar = tqdm(range(params['epochs']+1), desc=f"Epoch ", unit='epoch')
+    epoche = range(params['epochs']+1)
+    #pbar = tqdm(epoche, desc=f"Epoch ", unit='epoch')
 
     # Creiamo la figura in anticipo
     fig, ax = plt.subplots()
 
     testing_epochs = params['testing_epochs']
     checkpoint_epochs = params['checkpoint_epochs']
-    for epoch in pbar:
-        train_loss = train_one_epoch(model, train_loader, optimizer, criterion)
+    deltasT = []
+    for epoch in epoche:
+        t0 = time()
+
+        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, scaler)
+        dt = time() - t0
+        deltasT.append(dt)
         train_losses.append(train_loss)
 
         if epoch % (checkpoint_epochs) == 0:
@@ -312,13 +335,14 @@ def train(model, train_loader, test_loader, params, save_path):
             save_checkpoint(model, optimizer, epoch, train_loss, file_checkpoint)
 
         # Aggiorniamo la barra con la loss attuale
-        pbar.set_postfix({'loss': f"{train_loss:.6f}"})
+        #pbar.set_postfix({'loss': f"{train_loss:.6f}"})
 
         # print(f"Epoch [{epoch+1}/{n_epochs}] - "
         #      f"Train Loss: {train_loss:.4f} - "
         #      f"Test Loss: {val_loss:.4f}")
 
         if epoch % testing_epochs == 0:
+            print(f"tempo medio per epoca: {np.array(deltasT).mean()}")
             val_loss = evaluate_model(model, test_loader, criterion)
             val_losses.append(val_loss)
 
@@ -345,7 +369,7 @@ def train(model, train_loader, test_loader, params, save_path):
     plt.close(fig)
 
 
-def train_one_epoch(model, data_loader, optimizer, criterion):
+def train_one_epoch(model, data_loader, optimizer, criterion, scaler):
     model.train()
     running_loss = 0.0
     total_samples = len(data_loader.dataset)
@@ -353,7 +377,7 @@ def train_one_epoch(model, data_loader, optimizer, criterion):
     for X_batch, y_batch in data_loader:
         optimizer.zero_grad()
 
-        with torch.cuda.amp.autocast():
+        with autocast():
             outputs = model(X_batch)  # (batch_size, horizon)
             loss = criterion(outputs, y_batch)
 
