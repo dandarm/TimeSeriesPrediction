@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from IPython.display import clear_output, display
 
 from pipeline_o1 import read_last_n_lines, get_loaders, train_one_epoch, evaluate_model, plot_losses, create_sequences, normalize_windows
-from modelli import xLSTM, ImprovedLSTM, save_checkpoint, load_checkpoint, load_model
+from modelli import xLSTM, ImprovedLSTM, save_checkpoint, load_checkpoint, load_model, load_Transformer_model
 from config import get_default_params, get_exp_str
 from testing import plot_predictions, plot_one_prediction, backtest_strategy, plot_backtest_with_forecasts
 from pipeline_o1 import train, load_BTC_data, get_datasetloader_from_path
@@ -76,6 +76,7 @@ def launch_training():
 
     # 3.1 Recupera i param default
     pms = get_default_params()
+    device = pms['device']
     exp_str = get_exp_str(pms)
 
     # LOAD DATA
@@ -83,7 +84,8 @@ def launch_training():
     serie, time_index = load_BTC_data(data_path)
     train_loader, test_loader, train_dataset, test_dataset = get_datasetloader_from_path(serie, pms)
     # LOAD MODEL
-    model = load_model(pms)
+    #model = load_model(pms)
+    model = load_Transformer_model(pms)
 
     train(model, train_loader, test_loader, pms, save_path)
     print("Fine training!")
