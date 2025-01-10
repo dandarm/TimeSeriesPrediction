@@ -9,14 +9,12 @@ import os
 from sklearn.preprocessing import MinMaxScaler
 
 import torch
+torch.set_float32_matmul_precision('high')
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 
-
-from IPython.display import clear_output, display
-
-from pipeline_o1 import read_last_n_lines, get_loaders, train_one_epoch, evaluate_model, plot_losses, create_sequences, normalize_windows
+from pipeline_o1 import read_last_n_lines, get_loaders, train_one_epoch, evaluate_model, plot_losses, create_sequences, normalize_windows, load_increasing_complex_ts
 from modelli import xLSTM, ImprovedLSTM, save_checkpoint, load_checkpoint, load_model, load_Transformer_model
 from config import get_default_params, get_exp_str
 from testing import plot_predictions, plot_one_prediction, backtest_strategy, plot_backtest_with_forecasts
@@ -72,6 +70,9 @@ def backtesting():
     plot_backtest_with_forecasts(select_idx(backtest_df,400, 500), horizon=5)
 
 
+root_path = Path("./")
+save_path = root_path / "output"
+
 def launch_training():
     root_path = Path("./")
     save_path = root_path / "output"
@@ -82,7 +83,7 @@ def launch_training():
     exp_str = get_exp_str(pms)
 
     # LOAD DATA
-    data_path = "../resampled32k_BTC.csv"
+    data_path = "./resampled32k_BTC.csv"
     serie, time_index = load_BTC_data(data_path)
     train_loader, test_loader, train_dataset, test_dataset = get_datasetloader_from_path(serie, pms)
     # LOAD MODEL
@@ -96,6 +97,28 @@ def launch_training():
 
 
 
+def launch_increasing_complex_series_train():
+    print("Esperimento training su sinusoidi complesse")
+    pms = get_default_params()
+    data_path = './serie_generate_198_3600_50.npy'
+
+    num_sinus = [8, 18, 28, 38, 48, 58, 68, 78, 88, 98, 118, 133, 148, 163, 178, 193]
+    for s in num_sinus:
+        series, time_index = load_increasing_complex_ts(data_path, s)
+        series = series[0:10]
+
+        train_loader, test_loader, train_dataset, test_dataset = get_datasetloader_from_path(series, pms)
+
+        model = load_model(pms)
+        total_params = sum(p.numel() for p in model.parameters())
+
+        pms['sum_sinus'] = s
+        pms['model_params'] = total_params
+        train(model, train_loader, test_loader, pms, save_path)
+
+
+
 if __name__ == "__main__":
-    launch_training()
+    #launch_training()
+    launch_increasing_complex_series_train()
     # backtesting()

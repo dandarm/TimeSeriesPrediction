@@ -42,7 +42,15 @@ def load_checkpoint(file_path, model, optimizer=None):
     #    raise FileNotFoundError(f"Checkpoint non trovato: {file_path}")
 
     checkpoint = torch.load(file_path)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    state_dict = checkpoint['model_state_dict']
+
+    # Rimuovi il prefisso `_orig_mod.` se presente
+    new_state_dict = {}
+    for key, value in state_dict.items():
+        new_key = key.replace("_orig_mod.", "")  # Rimuove il prefisso
+        new_state_dict[new_key] = value
+
+    model.load_state_dict(new_state_dict)
     if optimizer:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
@@ -76,10 +84,10 @@ def load_Transformer_model(params, save_path=None, model_path=None):
 
     model = TimeSeriesTransformer(
         input_dim=1,
-        d_model=64,
-        nhead=8,
-        num_encoder_layers=4,
-        dim_feedforward=128,
+        d_model=64,  #512
+        nhead=8,  #16
+        num_encoder_layers=4,  #8
+        dim_feedforward=128, #1024
         dropout=0.1,
         max_len=5000,
         out_dim=params['horizon'],  # previsioni scalari

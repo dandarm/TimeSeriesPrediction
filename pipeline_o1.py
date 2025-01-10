@@ -19,8 +19,6 @@ try:
 except ImportError:
     compile_available = False
 
-from IPython.display import clear_output, display
-
 from torch.nn.parallel import DistributedDataParallel as DDP
 import os
 import sys
@@ -28,7 +26,8 @@ sys.path.append("./TimeSeries_Prediction")
 from config import get_exp_str
 from modelli import save_checkpoint
 from tqdm import tqdm
-
+from joblib import Parallel, delayed
+import csv
 
 
 # region funzioni dataset
@@ -98,11 +97,10 @@ def read_last_n_lines(filepath, n=10000, encoding='utf-8'):
 # DATASET E DATALOADER
 # ---------------------------------------------------------
 
-def create_sequences(data, seq_length=30, horizon=1):
+def create_sequences(data_list, seq_length=30, horizon=1, step=1):
     """
     Crea sequenze per un modello che prevede "horizon" passi futuri.
-    data: array/tensor 1D o 2D [N, features]
-          (qui assumeremo 1D -> (N,))
+    data_list: lista di array/tensor 1D o 2D [N, features] oppure un singolo array/tensor 1D.
     seq_length: quanti punti passati guardare
     horizon: quanti step futuri prevedere in uscita
 
@@ -113,12 +111,16 @@ def create_sequences(data, seq_length=30, horizon=1):
     X, y = [], []
     # Assumiamo data come 1D: shape (N,)
     # se hai più feature, adatta di conseguenza
-    for i in range(len(data) - seq_length - horizon + 1):
-        seq_x = data[i: i + seq_length]  # finestra [i, i+seq_length)
-        seq_y = data[i + seq_length: i + seq_length + horizon]  # successivi 'horizon' punti
-        X.append(seq_x)
-        #print(seq_x.shape)
-        y.append(seq_y)
+    for data in data_list:
+        # Trasformare la serie in un tensore se necessario
+        if not isinstance(data, torch.Tensor):
+            data = torch.tensor(data, dtype=torch.float32)
+        for i in range(0, len(data) - seq_length - horizon + 1, step):
+            seq_x = data[i: i + seq_length]  # finestra [i, i+seq_length)
+            seq_y = data[i + seq_length: i + seq_length + horizon]  # successivi 'horizon' punti
+            X.append(seq_x)
+            #print(seq_x.shape)
+            y.append(seq_y)
 
     # for i, xi in enumerate(X):
     #    print(i, np.array(xi).shape, np.array(xi).dtype)
@@ -137,6 +139,60 @@ def create_sequences(data, seq_length=30, horizon=1):
     X = X.unsqueeze(-1)  # shape (num_samples, seq_length, 1)
 
     return X, y
+
+
+def create_sequences_parallel(data_list, seq_length=30, horizon=1, step=1, n_jobs=32):
+    """
+    Crea sequenze per un modello che prevede "horizon" passi futuri in parallelo.
+    data_list: lista di array/tensor 1D o 2D [N, features] oppure un singolo array/tensor 1D.
+    seq_length: quanti punti passati guardare.
+    horizon: quanti step futuri prevedere in uscita.
+    n_jobs: numero di processi paralleli (-1 usa tutti i core disponibili).
+    """
+    if not isinstance(data_list, list):
+        data_list = [data_list]
+
+    def process_single_series(data):
+        X, y = [], []
+        #if not isinstance(data, torch.Tensor):
+        #    data = torch.tensor(data, dtype=torch.float32)
+        # Controlla se la serie è abbastanza lunga
+        #print(len(data), seq_length + horizon, flush=True)
+        for i in range(0, len(data) - seq_length - horizon + 1, step):
+            seq_x = data[i: i + seq_length]  # finestra [i, i+seq_length)
+            seq_y = data[i + seq_length: i + seq_length + horizon]  # successivi 'horizon' punti
+            X.append(seq_x)
+            y.append(seq_y)
+
+        # Controlla se sono stati creati dati
+        if not X or not y:
+            print(f"Nessuna sequenza creata per questa serie: len(data)={len(data)}")
+            return torch.empty(0), torch.empty(0)
+
+        #return torch.stack(X), torch.stack(y)
+        return torch.tensor(np.array(X)), torch.tensor(np.array(y))
+
+    # Parallelizza il processo su tutte le serie
+    results = Parallel(n_jobs=n_jobs)(
+        delayed(process_single_series)(data) for data in data_list
+    )
+    # Filtra i risultati vuoti
+    valid_results = [(x, y) for x, y in results if x.numel() > 0 and y.numel() > 0]
+
+    if not valid_results:
+        raise ValueError("Nessuna serie ha generato dati validi. Controlla seq_length e horizon.")
+
+    # Combina i risultati da tutte le serie
+    X, y = zip(*results)
+    X = torch.cat(X)  # Unisce le sequenze in un unico tensore
+    y = torch.cat(y)  # Unisce i target in un unico tensore
+
+    # Aggiunge una dimensione feature per compatibilità con LSTM
+    X = X.unsqueeze(-1)  # shape (num_samples, seq_length, 1)
+
+    return X, y
+
+
 
 def normalize_windows(X, y):
     """
@@ -178,12 +234,17 @@ def normalize_windows(X, y):
 class TimeSeriesDataset(Dataset):
     def __init__(self, data, seq_length=30, horizon=1, device='cuda'):
         """
-        data: tensore 1D con la serie temporale
+        data: tensore 1D o lista di tensori/array con serie temporali
         seq_length: quanti punti usare come input
         horizon: quanti step prevedere in avanti (qui ne prevediamo solo 1)
         """
         super().__init__()
-        self.X, self.y = create_sequences(data, seq_length, horizon)
+
+        # Uniformiamo data in una lista, se necessario
+        if not isinstance(data, list):
+            data = [data]
+
+        self.X, self.y = create_sequences_parallel(data, seq_length, horizon, n_jobs=32)
         # self.X shape: (num_samples, seq_length, 1)
         # self.y shape: (num_samples, horizon)
 
@@ -220,10 +281,16 @@ def get_loaders(**kwargs):
     train_split = kwargs.get('train_split')
     batch_size = kwargs.get('batch_size')
 
+    # Uniformare serie in una lista, se necessario
+    if not isinstance(serie, list):
+        serie = [serie]
 
-    split_point = int(len(serie) * train_split)
-    train_data = serie[:split_point]
-    test_data = serie[split_point:]
+    # Suddividere ciascuna serie in train e test
+    train_data, test_data = [], []
+    for s in serie:
+        split_point = int(len(s) * train_split)
+        train_data.append(s[:split_point])
+        test_data.append(s[split_point:])
 
     # 6.2 Creiamo i dataset di train e test
     train_dataset = TimeSeriesDataset(train_data, seq_length=seq_length, horizon=horizon, device=device)
@@ -249,13 +316,13 @@ def load_BTC_data(data_path):
 
     return serie, time_index
 
-def load_increasing_complex_ts(data_path, k, idx):
+def load_increasing_complex_ts(data_path, k):
     serie_generate = np.load(data_path, allow_pickle=True).item()
-    print(f"Num. Serie sommate sontenute: {serie_generate.keys()}")
-    serie = torch.tensor(serie_generate[k][idx])
-    time_index = range(len(serie))
+    print(f"Num. Serie sommate contenute: {serie_generate.keys()}")
+    series = serie_generate[k]
+    time_index = range(len(series[0]))
 
-    return serie, time_index
+    return series, time_index
 
 def get_datasetloader_from_path(time_serie, params):
     seq_length = params['seq_length']
@@ -309,7 +376,19 @@ def train(model, train_loader, test_loader, params, save_path):
     # GradScaler per AMP
     scaler = GradScaler()
 
-    # 6.7 Training loop con logging
+
+    # ------------ EARLY STOPPING VARIABLES ------------
+    patience = params.get('patience', 100)      # numero di "tentativi" concessi
+    min_delta = params.get('min_delta', 1e-2)  # miglioramento minimo richiesto
+    target_loss = params.get('threshold_loss', 0.0001)
+    wait = 0
+    best_val_loss = float('inf')
+    best_epoch = 0
+    early_stopping_triggered = False
+    threshold_loss_reached = False
+    # --------------------------------------------------
+
+
     train_losses = []
     val_losses = []
 
@@ -322,32 +401,49 @@ def train(model, train_loader, test_loader, params, save_path):
     testing_epochs = params['testing_epochs']
     checkpoint_epochs = params['checkpoint_epochs']
     deltasT = []
+
     for epoch in epoche:
         t0 = time()
 
-        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, scaler)
+        if epoch % testing_epochs == 0:
+            train_loss = train_one_epoch(model, train_loader, optimizer, criterion, scaler, get_loss=True)
+        else:
+            train_one_epoch(model, train_loader, optimizer, criterion, scaler, get_loss=False)
+
         dt = time() - t0
         deltasT.append(dt)
         train_losses.append(train_loss)
 
-        if epoch % (checkpoint_epochs) == 0:
-            file_checkpoint = output_path / f"checkpoint_{epoch}.pth"
-            save_checkpoint(model, optimizer, epoch, train_loss, file_checkpoint)
-
         # Aggiorniamo la barra con la loss attuale
         #pbar.set_postfix({'loss': f"{train_loss:.6f}"})
 
-        # print(f"Epoch [{epoch+1}/{n_epochs}] - "
-        #      f"Train Loss: {train_loss:.4f} - "
-        #      f"Test Loss: {val_loss:.4f}")
-
         if epoch % testing_epochs == 0:
-            print(f"tempo medio per epoca: {np.array(deltasT).mean()}")
+            print(f"Tempo medio per epoca: {round(np.array(deltasT).mean(),3)} s.")
             val_loss = evaluate_model(model, test_loader, criterion)
             val_losses.append(val_loss)
 
+            # --- EARLY STOPPING LOGIC ---
+            if val_loss < target_loss:
+                # abbiamo raggiunto una convergenza per un training buono
+                threshold_loss_reached = True
+            if val_loss < best_val_loss - min_delta:
+                # c'è stato un miglioramento sufficiente
+                best_val_loss = val_loss
+                best_epoch = epoch
+                wait = 0
+
+                if epoch > (checkpoint_epochs):  #  == 0:
+                    file_checkpoint = output_path / f"checkpoint_{epoch}.pth"
+                    save_checkpoint(model, optimizer, epoch, train_loss, file_checkpoint)
+            else:
+                wait += 1
+                if wait >= patience:
+                    print(f"[Early Stopping] Stop at epoch {epoch}. Best val_loss: {best_val_loss:.6f} (epoch {best_epoch})")
+                    early_stopping_triggered = True
+            # ----------------------------
+
             # -- Plot dinamico --
-            clear_output(wait=True)  # pulisce l'output
+            #clear_output(wait=True)  # pulisce l'output
             ax.clear()  # ripulisce il grafico
             ax.plot(train_losses, label='Train Loss')
             ax.plot(val_losses, label='Val Loss')
@@ -355,21 +451,36 @@ def train(model, train_loader, test_loader, params, save_path):
             ax.set_ylabel('Loss')
             ax.set_yscale('log')
             ax.set_xscale('log')
-            ax.set_title('Training progress')
+            titolo = 'Training progress'
+            if early_stopping_triggered:
+                titolo += " - (Early stopping triggered)"
+            if threshold_loss_reached:
+                titolo += " - (Minimum loss reached)"
+            ax.set_title(titolo)
+
             ax.legend()
             plt.savefig(output_path / f"losses_{epoch}.png")
 
         else:
             val_losses.append(val_loss)  # salvo il valore precedente, non lo ricalcolo e non plotto
 
-        # display(fig)                  # ridisegna la figura aggiornata
+        if early_stopping_triggered or threshold_loss_reached:
+            break
+
 
     # 6.8 Plot delle curve di loss
     # plot_losses(train_losses, val_losses)
     plt.close(fig)
 
+    # ---- Salvataggio CSV dei risultati di TUTTE le epoche fatte finora ----
+    # (vedi sezione 2 per dettagli)
+    exp_str = get_exp_str(params)  # stringa che unisce i valori di iperparametri
+    save_loss_csv(train_losses, val_losses, output_path, exp_str)
 
-def train_one_epoch(model, data_loader, optimizer, criterion, scaler):
+    return train_losses, val_losses, best_val_loss
+
+
+def train_one_epoch(model, data_loader, optimizer, criterion, scaler, get_loss=False):
     model.train()
     running_loss = 0.0
     total_samples = len(data_loader.dataset)
@@ -386,10 +497,10 @@ def train_one_epoch(model, data_loader, optimizer, criterion, scaler):
         #optimizer.step()
         scaler.step(optimizer)
         scaler.update()
+        if get_loss:
+            running_loss += loss.item() * X_batch.size(0)
 
-        running_loss += loss.item() * X_batch.size(0)
-
-    epoch_loss = running_loss / total_samples
+    epoch_loss = running_loss / total_samples if get_loss else 0.0
     return epoch_loss
 
 
@@ -430,6 +541,24 @@ def plot_losses(train_losses, val_losses):
 
 
 
-
-
 # endregion
+
+
+# utlity
+def save_loss_csv(train_losses, val_losses, output_path, exp_str):
+    """
+    Salva train_losses e val_losses su un file CSV nella cartella di output,
+    con un nome basato su exp_str.
+    """
+    csv_file = output_path / f"losses_{exp_str}.csv"
+
+    with open(csv_file, mode='w', newline='') as f:
+        writer = csv.writer(f)
+        # Header
+        writer.writerow(["epoch", "train_loss", "val_loss"])
+
+        # train_losses e val_losses dovrebbero avere la stessa lunghezza
+        for epoch_idx, (tr_loss, v_loss) in enumerate(zip(train_losses, val_losses)):
+            writer.writerow([epoch_idx, tr_loss, v_loss])
+
+    print(f"[INFO] Results saved to {csv_file}")
