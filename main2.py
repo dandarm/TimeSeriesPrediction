@@ -105,7 +105,7 @@ def launch_increasing_complex_series_train():
     num_sinus = [8, 18, 28, 38, 48, 58, 68, 78, 88, 98, 118, 133, 148, 163, 178, 193]
     for s in num_sinus:
         series, time_index = load_increasing_complex_ts(data_path, s)
-        series = series[0:10]
+        series = series[0:15]
 
         train_loader, test_loader, train_dataset, test_dataset = get_datasetloader_from_path(series, pms)
 

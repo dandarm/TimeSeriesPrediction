@@ -7,23 +7,23 @@ def get_default_params():
     return {
         'device': 'cuda',
         'train_split': 0.7,
-        'batch_size': 3500,
+        'batch_size': 2000,
         'epochs': 5000,
-        'testing_epochs': 20,
+        'testing_epochs': 10,
         'checkpoint_epochs': 200,
 
         # parametri early stopping
-        'patience': 100,
-        'min_delta': 1e-2,
+        'patience': 500,
+        'min_delta': 1e-4,
         'threshold_loss': 1e-3,
 
         # Parametri modello
-        'seq_length': 128,       # lunghezza finestra
+        'seq_length': 256,       # lunghezza finestra
         'horizon': 10,           # quanti step prevedere
-        'learning_rate': 0.003,
+        'learning_rate': 0.002,
 
         # modello LSTM
-        'hidden_dim': 100,
+        'hidden_dim': 128,
 
         # modello Transformer
         'emb_size': 1,
