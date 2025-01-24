@@ -75,6 +75,7 @@ def load_model(params, save_path=None, model_path=None):
     #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device = params['device']
     model.to(device)
+    #model.half()
 
     return model
 
@@ -101,6 +102,7 @@ def load_Transformer_model(params, save_path=None, model_path=None):
 
     device = params['device']
     model.to(device)
+    #model.half()
 
     return model
 

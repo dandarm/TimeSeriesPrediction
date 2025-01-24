@@ -113,21 +113,16 @@ def create_sequences(data_list, seq_length=30, horizon=1, step=1):
     # se hai più feature, adatta di conseguenza
     for data in data_list:
         # Trasformare la serie in un tensore se necessario
-        if not isinstance(data, torch.Tensor):
-            data = torch.tensor(data, dtype=torch.float32)
-        for i in range(0, len(data) - seq_length - horizon + 1, step):
-            seq_x = data[i: i + seq_length]  # finestra [i, i+seq_length)
-            seq_y = data[i + seq_length: i + seq_length + horizon]  # successivi 'horizon' punti
-            X.append(seq_x)
-            #print(seq_x.shape)
-            y.append(seq_y)
+        #if not isinstance(data, torch.Tensor):
+        #    data = torch.tensor(data, dtype=torch.float32)
+        make_windows_loop(X, data, horizon, seq_length, step, y)
 
     # for i, xi in enumerate(X):
     #    print(i, np.array(xi).shape, np.array(xi).dtype)
 
     #X_np = np.array(X, dtype=np.float32)
-    X = torch.stack(X) # shape (num_samples, seq_length)
-    y = torch.stack(y)  # shape (num_samples, horizon)
+    X = np.stack(X)  # shape (num_samples, seq_length)
+    y = np.stack(y)  # shape (num_samples, horizon)
 
     # Convertiamo in tensori PyTorch
     #X = torch.tensor(X)
@@ -136,12 +131,37 @@ def create_sequences(data_list, seq_length=30, horizon=1, step=1):
     # Se la serie era 1D, X ha shape (num_samples, seq_length)
     # Per le reti LSTM, di solito serve (batch, time, features).
     # features=1 se c'è una sola variabile. Quindi facciamo un unsqueeze(-1).
-    X = X.unsqueeze(-1)  # shape (num_samples, seq_length, 1)
+    #X = X.unsqueeze(-1)  # shape (num_samples, seq_length, 1)
 
     return X, y
 
+def process_single_series(data, seq_length, horizon, step):
+    X, y = [], []
+    #if not isinstance(data, torch.Tensor):
+    #    data = torch.tensor(data, dtype=torch.float32)
+    # Controlla se la serie è abbastanza lunga
+    #print(len(data), seq_length + horizon, flush=True)
+    make_windows_loop(X, data, horizon, seq_length, step, y)
 
-def create_sequences_parallel(data_list, seq_length=30, horizon=1, step=1, n_jobs=32):
+    # Controlla se sono stati creati dati
+    if not X or not y:
+        print(f"Nessuna sequenza creata per questa serie: len(data)={len(data)}")
+        return np.empty(0), np.empty(0)
+
+    #return torch.stack(X), torch.stack(y)
+    #return torch.tensor(np.array(X)), torch.tensor(np.array(y))
+    return np.stack(X), np.stack(y)
+
+
+def make_windows_loop(X, data, horizon, seq_length, step, y):
+    for i in range(0, len(data) - seq_length - horizon + 1, step):
+        seq_x = data[i: i + seq_length]  # finestra [i, i+seq_length)
+        seq_y = data[i + seq_length: i + seq_length + horizon]  # successivi 'horizon' punti
+        X.append(seq_x)
+        y.append(seq_y)
+
+
+def create_sequences_parallel(data_list, seq_length=30, horizon=1, step=1, n_jobs=32, n_samples=10000):
     """
     Crea sequenze per un modello che prevede "horizon" passi futuri in parallelo.
     data_list: lista di array/tensor 1D o 2D [N, features] oppure un singolo array/tensor 1D.
@@ -152,49 +172,66 @@ def create_sequences_parallel(data_list, seq_length=30, horizon=1, step=1, n_job
     if not isinstance(data_list, list):
         data_list = [data_list]
 
-    def process_single_series(data):
-        X, y = [], []
-        #if not isinstance(data, torch.Tensor):
-        #    data = torch.tensor(data, dtype=torch.float32)
-        # Controlla se la serie è abbastanza lunga
-        #print(len(data), seq_length + horizon, flush=True)
-        for i in range(0, len(data) - seq_length - horizon + 1, step):
-            seq_x = data[i: i + seq_length]  # finestra [i, i+seq_length)
-            seq_y = data[i + seq_length: i + seq_length + horizon]  # successivi 'horizon' punti
+    def process_single_series_random(data):
+        """
+        Campiona 'n_samples' finestre (X, y) in modo casuale dalla serie 'data'.
+        - data: array 1D (o 2D, se hai più feature) con i dati
+        - seq_length: quanti punti per la finestra di input
+        - horizon: quanti punti futuri prevedere
+        - n_samples: numero di finestre da estrarre
+
+        Ritorna:
+          X.shape -> (n_samples, seq_length, ...)  (dipende dalla dimensionalità di 'data')
+          y.shape -> (n_samples, horizon, ...)
+        """
+        X, Y = [], []
+
+        max_start = len(data) - seq_length - horizon
+        if max_start <= 0:
+            raise ValueError("Data too short per creare finestre con seq_length + horizon")
+
+        # Se n_samples > max_start, o riduci n_samples, oppure metti replace=True
+        # A seconda di come vuoi gestire. Qui assumiamo di limitare n_samples se necessario.
+        #n_samples = min(n_samples, max_start)
+
+        # Genera indici casuali (start di ogni finestra)
+        # Scegliendo 'replace=False', non avrai duplicati
+        starts = np.random.choice(max_start, size=n_samples, replace=False)
+
+        for i in starts:
+            seq_x = data[i: i + seq_length]
+            seq_y = data[i + seq_length: i + seq_length + horizon]
             X.append(seq_x)
-            y.append(seq_y)
+            Y.append(seq_y)
 
-        # Controlla se sono stati creati dati
-        if not X or not y:
-            print(f"Nessuna sequenza creata per questa serie: len(data)={len(data)}")
-            return torch.empty(0), torch.empty(0)
-
-        #return torch.stack(X), torch.stack(y)
-        return torch.tensor(np.array(X)), torch.tensor(np.array(y))
+        X = np.stack(X)
+        Y = np.stack(Y)
+        return X, Y
 
     # Parallelizza il processo su tutte le serie
     results = Parallel(n_jobs=n_jobs)(
-        delayed(process_single_series)(data) for data in data_list
+        delayed(process_single_series_random)(data) for data in data_list
     )
     # Filtra i risultati vuoti
-    valid_results = [(x, y) for x, y in results if x.numel() > 0 and y.numel() > 0]
+    #valid_results = [(x, y) for x, y in results if x.numel() > 0 and y.numel() > 0]
 
-    if not valid_results:
-        raise ValueError("Nessuna serie ha generato dati validi. Controlla seq_length e horizon.")
-
+    #if not valid_results:
+    #    raise ValueError("Nessuna serie ha generato dati validi. Controlla seq_length e horizon.")
+    print("Sequenze estratte")
     # Combina i risultati da tutte le serie
     X, y = zip(*results)
-    X = torch.cat(X)  # Unisce le sequenze in un unico tensore
-    y = torch.cat(y)  # Unisce i target in un unico tensore
-
+    X = np.concatenate(np.array(X))  # Unisce le sequenze in un unico tensore
+    y = np.concatenate(np.array(y))  # Unisce i target in un unico tensore
+    print(f"X shape: {X.shape} - y shape: {y.shape}")
     # Aggiunge una dimensione feature per compatibilità con LSTM
-    X = X.unsqueeze(-1)  # shape (num_samples, seq_length, 1)
+    #X = X.unsqueeze(-1)  # shape (num_samples, seq_length, 1)
+    #X = X[np.newaxis]
 
     return X, y
 
 
 
-def normalize_windows(X, y):
+def normalize_windows(X, Y):
     """
     Normalizza ogni finestra (ogni riga) di X e y separatamente usando MinMaxScaler.
 
@@ -209,30 +246,46 @@ def normalize_windows(X, y):
         scalers_y (list): Lista di MinMaxScaler per ogni finestra di y
     """
     X_normalized = np.zeros_like(X, dtype=np.float32)  # Per memorizzare i valori normalizzati
-    y_normalized = np.zeros_like(y, dtype=np.float32)  # Per memorizzare i target normalizzati
+    y_normalized = np.zeros_like(Y, dtype=np.float32)  # Per memorizzare i target normalizzati
 
-    scalers_X = []  # Per memorizzare i MinMaxScaler di ogni finestra X
-    #scalers_y = []  # Per memorizzare i MinMaxScaler di ogni finestra y
+    #scalers_X = []  # Per memorizzare i MinMaxScaler di ogni finestra X
 
-    for i in range(X.shape[0]):
-        # Normalizzazione di ogni finestra X[i]
+    def single_normalization(x,y):
         scaler_X = MinMaxScaler(feature_range=(0, 1))
-        X_reshaped = X[i, :].reshape(-1, 1)
-        X_normalized[i, :] = scaler_X.fit_transform(X_reshaped)#.flatten()
-        scalers_X.append(scaler_X)
+        X_reshaped = x[:, np.newaxis]
+        X_normalized = scaler_X.fit_transform(X_reshaped).flatten()
+        y_reshaped = y[:, np.newaxis]
+        y_normalized = scaler_X.transform(y_reshaped).flatten()
+        return X_normalized, y_normalized, scaler_X
 
-        # Normalizzazione di ogni target y[i] -> !!!! USO LO STESSO SCALER X PERCHÉ ALTRIMENTI
-        # C'È DATA LEAKAGE DAL FUTURO
-        #scaler_y = MinMaxScaler(feature_range=(0, 1))
-        y_reshaped = y[i, :].reshape(-1, 1)
-        y_normalized[i, :] = scaler_X.transform(y_reshaped).flatten()
-        #scalers_y.append(scaler_y)
+    results = Parallel(n_jobs=32)(
+        delayed(single_normalization)(x,y) for x,y in zip(X,Y)
+    )
+    print("Finestre normalizzati")
+    X_normalized, y_normalized, scalers_X = zip(*results)
+
+    X_normalized = np.array(X_normalized)
+    y_normalized = np.array(y_normalized)
+
+    # for i in range(X.shape[0]):
+    #     # Normalizzazione di ogni finestra X[i]
+    #     scaler_X = MinMaxScaler(feature_range=(0, 1))
+    #     X_reshaped = X[i, :][:,np.newaxis]
+    #     X_normalized[i, :] = scaler_X.fit_transform(X_reshaped).flatten()
+    #     scalers_X.append(scaler_X)
+    #
+    #     # Normalizzazione di ogni target y[i] -> !!!! USO LO STESSO SCALER X PERCHÉ ALTRIMENTI
+    #     # C'È DATA LEAKAGE DAL FUTURO
+    #     #scaler_y = MinMaxScaler(feature_range=(0, 1))
+    #     y_reshaped = y[i, :][:,np.newaxis]
+    #     y_normalized[i, :] = scaler_X.transform(y_reshaped).flatten()
+    #     #scalers_y.append(scaler_y)
 
     return X_normalized, y_normalized, scalers_X
 
 
 class TimeSeriesDataset(Dataset):
-    def __init__(self, data, seq_length=30, horizon=1, device='cuda'):
+    def __init__(self, data, seq_length=30, horizon=1, device='cuda', step=1, n_samples=1000):
         """
         data: tensore 1D o lista di tensori/array con serie temporali
         seq_length: quanti punti usare come input
@@ -244,7 +297,7 @@ class TimeSeriesDataset(Dataset):
         if not isinstance(data, list):
             data = [data]
 
-        self.X, self.y = create_sequences_parallel(data, seq_length, horizon, n_jobs=32)
+        self.X, self.y = create_sequences_parallel(data, seq_length, horizon, n_jobs=32, n_samples=n_samples)   #step=step)
         # self.X shape: (num_samples, seq_length, 1)
         # self.y shape: (num_samples, horizon)
 
@@ -253,13 +306,13 @@ class TimeSeriesDataset(Dataset):
 
         # Ridimensioniamo X in (batch, seq_length, 1)
         # per compatibilità con LSTM (che di solito ha shape [B, T, Features]).
-        # self.X = self.X.unsqueeze(-1)  # shape -> (num_samples, seq_length, 1)
-        # dovrebbe averlo già fatto create_sequences
+        self.X = self.X.unsqueeze(-1)  # shape -> (num_samples, seq_length, 1)
+
         self.X = self.X.to(device)
         self.y = self.y.to(device)
 
-        assert self.X.is_cuda, "I dati non sono su CUDA!"
-        assert self.y.is_cuda, "I target non sono su CUDA!"
+        #assert self.X.is_cuda, "I dati non sono su CUDA!"
+        #assert self.y.is_cuda, "I target non sono su CUDA!"
 
     def calc_normalization_4_windows(self):
         X_normalized, y_normalized, self.scalers_X = normalize_windows(self.X, self.y)
@@ -269,8 +322,34 @@ class TimeSeriesDataset(Dataset):
         return len(self.X)
 
     def __getitem__(self, idx):
-        return self.X[idx], self.y[idx]
+        x = torch.tensor(self.X[idx], dtype=torch.float32)
+        y = torch.tensor(self.y[idx], dtype=torch.float32)
+        return x, y
 
+class TimeSeriesDatasetOrdinato(TimeSeriesDataset):
+    def __init__(self, data, seq_length=30, horizon=1, device='cuda', step=1):
+        Dataset.__init__(self)
+        # Uniformiamo data in una lista, se necessario
+        if not isinstance(data, list):
+            data = [data]
+
+        # questa è la riga che cambia
+        self.X, self.y = create_sequences(data, seq_length, horizon, step=1)
+        self.scalers_X = None
+        super().calc_normalization_4_windows()
+
+        self.X = self.X.unsqueeze(-1)  # shape -> (num_samples, seq_length, 1)
+
+        self.X = self.X.to(device)
+        self.y = self.y.to(device)
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        x = torch.tensor(self.X[idx], dtype=torch.float32)
+        y = torch.tensor(self.y[idx], dtype=torch.float32)
+        return x, y
 
 def get_loaders(**kwargs):
     device = kwargs.get('device')
@@ -280,6 +359,8 @@ def get_loaders(**kwargs):
     horizon = kwargs.get('horizon')
     train_split = kwargs.get('train_split')
     batch_size = kwargs.get('batch_size')
+    step = int(kwargs.get('step'))
+    testset_ordinato = kwargs.get('testset_ordinato')
 
     # Uniformare serie in una lista, se necessario
     if not isinstance(serie, list):
@@ -293,8 +374,12 @@ def get_loaders(**kwargs):
         test_data.append(s[split_point:])
 
     # 6.2 Creiamo i dataset di train e test
-    train_dataset = TimeSeriesDataset(train_data, seq_length=seq_length, horizon=horizon, device=device)
-    test_dataset = TimeSeriesDataset(test_data, seq_length=seq_length, horizon=horizon, device=device)
+    train_dataset = TimeSeriesDataset(train_data, seq_length=seq_length, horizon=horizon, device=device, step=step, n_samples=10000)
+    test_dataset = TimeSeriesDataset(test_data, seq_length=seq_length, horizon=horizon, device=device, step=step, n_samples=2000)
+    if testset_ordinato:
+        test_dataset_ordinato = TimeSeriesDatasetOrdinato(test_data, seq_length=seq_length, horizon=horizon, device=device, step=1)
+    else:
+        test_dataset_ordinato = None
     print(f"Num. samples di training: {len(train_dataset)}, e {len(test_dataset)} samples di test ")
     print(f"Memoria GPU allocata: {torch.cuda.memory_allocated() / 1024 ** 2:.2f} MB")
     print(f"Memoria GPU riservata: {torch.cuda.memory_reserved() / 1024 ** 2:.2f} MB")
@@ -305,8 +390,7 @@ def get_loaders(**kwargs):
     test_loader = DataLoader(test_dataset, batch_size=batch_size)  #, num_workers=32, pin_memory=True)
     print(f"Num. Batch di training: {len(train_loader)}, e {len(test_loader)} batch di test ")
 
-
-    return train_loader, test_loader, train_dataset, test_dataset
+    return train_loader, test_loader, train_dataset, test_dataset, test_dataset_ordinato
 
 def load_BTC_data(data_path):
     df = pd.read_csv(data_path)
@@ -324,21 +408,17 @@ def load_increasing_complex_ts(data_path, k):
 
     return series, time_index
 
-def get_datasetloader_from_path(time_serie, params):
-    seq_length = params['seq_length']
-    horizon = params['horizon']
-    train_split = params['train_split']
-    batch_size = params['batch_size']
-    device = params['device']
+def get_datasetloader_from_path(time_serie, params, testset_ordinato=False):
 
-    train_loader, test_loader, train_dataset, test_dataset = get_loaders(serie=time_serie,
-                                                                         seq_length=seq_length,
-                                                                         horizon=horizon,
-                                                                         train_split=train_split,
-                                                                         batch_size=batch_size,
-                                                                         device=device)
+    if testset_ordinato:
+        train_loader, test_loader, train_dataset, test_dataset, test_dataset_ordinato = (
+        get_loaders(serie=time_serie, testset_ordinato=testset_ordinato, **params))
+    else:
+        test_dataset_ordinato = None
+        train_loader, test_loader, train_dataset, test_dataset, _ = (
+            get_loaders(serie=time_serie, testset_ordinato=testset_ordinato, **params))
 
-    return  train_loader, test_loader, train_dataset, test_dataset
+    return train_loader, test_loader, train_dataset, test_dataset, test_dataset_ordinato
 
 
 
@@ -418,7 +498,6 @@ def train(model, train_loader, test_loader, params, save_path):
         #pbar.set_postfix({'loss': f"{train_loss:.6f}"})
 
         if epoch % testing_epochs == 0:
-            print(f"Tempo medio per epoca: {round(np.array(deltasT).mean(),3)} s.")
             val_loss = evaluate_model(model, test_loader, criterion)
             val_losses.append(val_loss)
 
@@ -435,6 +514,7 @@ def train(model, train_loader, test_loader, params, save_path):
                 if epoch > (checkpoint_epochs):  #  == 0:
                     file_checkpoint = output_path / f"checkpoint_{epoch}.pth"
                     save_checkpoint(model, optimizer, epoch, train_loss, file_checkpoint)
+                    print(f"Tempo medio per epoca: {round(np.array(deltasT).mean(), 2)} s.")
             else:
                 wait += 1
                 if wait >= patience:
@@ -457,6 +537,7 @@ def train(model, train_loader, test_loader, params, save_path):
             if threshold_loss_reached:
                 titolo += " - (Minimum loss reached)"
             ax.set_title(titolo)
+            ax.grid(True, which="both")
 
             ax.legend()
             plt.savefig(output_path / f"losses_{epoch}.png")

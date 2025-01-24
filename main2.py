@@ -14,12 +14,13 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 
-from pipeline_o1 import read_last_n_lines, get_loaders, train_one_epoch, evaluate_model, plot_losses, create_sequences, normalize_windows, load_increasing_complex_ts
+from pipeline_o1 import read_last_n_lines, get_loaders, train_one_epoch, evaluate_model, plot_losses, normalize_windows, load_increasing_complex_ts
 from modelli import xLSTM, ImprovedLSTM, save_checkpoint, load_checkpoint, load_model, load_Transformer_model
 from config import get_default_params, get_exp_str
 from testing import plot_predictions, plot_one_prediction, backtest_strategy, plot_backtest_with_forecasts
 from pipeline_o1 import train, load_BTC_data, get_datasetloader_from_path
 from tqdm import tqdm
+from sum_time_series import parallel_generate_series
 
 def select_idx(backtest_df, i,f):
     return backtest_df.iloc[i:f].reset_index().reset_index().drop(columns=['index', 'time_index']).rename(columns={'level_0':'time_index'})
@@ -101,24 +102,52 @@ def launch_increasing_complex_series_train():
     print("Esperimento training su sinusoidi complesse")
     pms = get_default_params()
     data_path = './serie_generate_198_3600_50.npy'
+    data_path = './serie_generate_198_360000_1.npy'
 
-    num_sinus = [8, 18, 28, 38, 48, 58, 68, 78, 88, 98, 118, 133, 148, 163, 178, 193]
+    num_sinus = [28, 43, 58, 73, 88, 103, 118, 133, 148, 163, 178, 193]  # 8, 13,
     for s in num_sinus:
         series, time_index = load_increasing_complex_ts(data_path, s)
-        series = series[0:15]
+        series = series[0]
 
         train_loader, test_loader, train_dataset, test_dataset = get_datasetloader_from_path(series, pms)
 
         model = load_model(pms)
         total_params = sum(p.numel() for p in model.parameters())
+        print(f"Modello con {total_params} parametri")
 
         pms['sum_sinus'] = s
         pms['model_params'] = total_params
-        train(model, train_loader, test_loader, pms, save_path)
+        _, _, _ = train(model, train_loader, test_loader, pms, save_path)
 
+def create_series():
+    series_length = 36000
+    n_series_range = range(201, 1001, 50)
+    num_repetitions = 1
+    exponent = -1.0001
+    freq_range = (0.000001, 500)
+    serie_generate, _, _ = parallel_generate_series(n_series_range, num_repetitions, series_length, 1, exponent, freq_range, C=1)
+
+    return serie_generate
+
+def create_series_and_launch_training():
+    serie_generate = create_series()
+    print("Esperimento training su sinusoidi complesse")
+    pms = get_default_params()
+
+    for i, series in serie_generate.items():
+        train_loader, test_loader, train_dataset, test_dataset, _ = get_datasetloader_from_path(series, pms)
+
+        model = load_model(pms)
+        total_params = sum(p.numel() for p in model.parameters())
+        print(f"Modello con {total_params} parametri")
+
+        pms['sum_sinus'] = i  # list(serie_generate.keys())[i]
+        pms['model_params'] = total_params
+        _, _, _ = train(model, train_loader, test_loader, pms, save_path)
 
 
 if __name__ == "__main__":
     #launch_training()
-    launch_increasing_complex_series_train()
+    #launch_increasing_complex_series_train()
     # backtesting()
+    create_series_and_launch_training()

@@ -8,19 +8,23 @@ def get_default_params():
         'device': 'cuda',
         'train_split': 0.7,
         'batch_size': 2000,
-        'epochs': 5000,
+        'epochs': 5,
         'testing_epochs': 10,
         'checkpoint_epochs': 200,
 
+        # parametri dataset increasing complex
+        'step': 5,
+
         # parametri early stopping
-        'patience': 500,
+        'patience': 50000,
         'min_delta': 1e-4,
         'threshold_loss': 1e-3,
 
         # Parametri modello
         'seq_length': 256,       # lunghezza finestra
         'horizon': 10,           # quanti step prevedere
-        'learning_rate': 0.002,
+        #'learning_rate': 0.0008,
+        'learning_rate': 0.001009,
 
         # modello LSTM
         'hidden_dim': 128,
