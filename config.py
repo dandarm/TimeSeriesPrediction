@@ -8,7 +8,7 @@ def get_default_params():
         'device': 'cuda',
         'train_split': 0.7,
         'batch_size': 2000,
-        'epochs': 5,
+        'epochs': 100000,
         'testing_epochs': 10,
         'checkpoint_epochs': 200,
 
@@ -16,7 +16,7 @@ def get_default_params():
         'step': 5,
 
         # parametri early stopping
-        'patience': 50000,
+        'patience': 150000,
         'min_delta': 1e-4,
         'threshold_loss': 1e-3,
 

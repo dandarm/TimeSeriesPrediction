@@ -103,13 +103,15 @@ def launch_increasing_complex_series_train():
     pms = get_default_params()
     data_path = './serie_generate_198_3600_50.npy'
     data_path = './serie_generate_198_360000_1.npy'
+    data_path = './serie_generate_951_360000_10.npy'
 
-    num_sinus = [28, 43, 58, 73, 88, 103, 118, 133, 148, 163, 178, 193]  # 8, 13,
+    #num_sinus = [28, 43, 58, 73, 88, 103, 118, 133, 148, 163, 178, 193]  # 8, 13,
+    num_sinus = [951]
     for s in num_sinus:
         series, time_index = load_increasing_complex_ts(data_path, s)
         series = series[0]
 
-        train_loader, test_loader, train_dataset, test_dataset = get_datasetloader_from_path(series, pms)
+        train_loader, test_loader, train_dataset, test_dataset, _ = get_datasetloader_from_path(series, pms)
 
         model = load_model(pms)
         total_params = sum(p.numel() for p in model.parameters())
@@ -120,7 +122,7 @@ def launch_increasing_complex_series_train():
         _, _, _ = train(model, train_loader, test_loader, pms, save_path)
 
 def create_series():
-    series_length = 36000
+    series_length = 360000
     n_series_range = range(201, 1001, 50)
     num_repetitions = 1
     exponent = -1.0001

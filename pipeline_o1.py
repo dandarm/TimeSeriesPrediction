@@ -316,14 +316,14 @@ class TimeSeriesDataset(Dataset):
 
     def calc_normalization_4_windows(self):
         X_normalized, y_normalized, self.scalers_X = normalize_windows(self.X, self.y)
-        self.X, self.y = torch.tensor(X_normalized), torch.tensor(y_normalized)
+        self.X, self.y = torch.tensor(X_normalized, dtype=torch.float32), torch.tensor(y_normalized, dtype=torch.float32)
 
     def __len__(self):
         return len(self.X)
 
     def __getitem__(self, idx):
-        x = torch.tensor(self.X[idx], dtype=torch.float32)
-        y = torch.tensor(self.y[idx], dtype=torch.float32)
+        x = self.X[idx]
+        y = self.y[idx]
         return x, y
 
 class TimeSeriesDatasetOrdinato(TimeSeriesDataset):
@@ -347,9 +347,8 @@ class TimeSeriesDatasetOrdinato(TimeSeriesDataset):
         return len(self.X)
 
     def __getitem__(self, idx):
-        x = torch.tensor(self.X[idx], dtype=torch.float32)
-        y = torch.tensor(self.y[idx], dtype=torch.float32)
-        return x, y
+        return Dataset.__getitem__(idx)
+
 
 def get_loaders(**kwargs):
     device = kwargs.get('device')
